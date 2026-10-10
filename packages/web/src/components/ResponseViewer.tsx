@@ -11,9 +11,13 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
   }
 
   if (response.error === "network") {
+    console.warn(
+      "[estela] error de red al disparar: posible CORS, backend caído o timeout.",
+      { requestId: response.requestId, durationMs: response.durationMs },
+    );
     return (
       <p className="mt-4 rounded border border-red-400/50 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-        Error de red: ¿backend caído o bloqueo CORS? (Recuerda: la extensión de Chrome resolverá CORS en el futuro)
+        No se pudo conectar al backend.
       </p>
     );
   }
@@ -51,7 +55,7 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
           ))}
         </ul>
       </details>
-      <pre className="font-mono whitespace-pre-wrap mt-3 max-h-96 overflow-auto rounded border border-slate-700 bg-slate-950 p-3 text-sm text-slate-100">
+      <pre className="no-scrollbar font-mono whitespace-pre-wrap mt-3 max-h-96 overflow-auto rounded border border-slate-700 bg-slate-950 p-3 text-sm text-slate-100">
         {prettyBody}
       </pre>
     </div>

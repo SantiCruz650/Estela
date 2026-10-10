@@ -78,7 +78,7 @@ export default function HistoryPanel() {
       {entries.length === 0 && !loading ? (
         <EmptyState message="Nada por aquí todavía — dispara y aparece solo." />
       ) : (
-        <div className="max-h-64 overflow-y-auto flex flex-col gap-1">
+        <div className="no-scrollbar max-h-64 overflow-y-auto flex flex-col gap-1">
           {entries.map((entry) => (
             <button
               key={entry.requestId}
@@ -146,7 +146,7 @@ export default function HistoryPanel() {
           {selected.requestBody !== undefined && (
             <div className="mt-2">
               <h4 className="text-slate-200">Body de la request</h4>
-              <pre className="font-mono whitespace-pre-wrap mt-1 max-h-48 overflow-auto rounded border border-slate-700 bg-slate-900 p-2 text-slate-100">
+              <pre className="no-scrollbar font-mono whitespace-pre-wrap mt-1 max-h-48 overflow-auto rounded border border-slate-700 bg-slate-900 p-2 text-slate-100">
                 {selected.requestBody}
               </pre>
             </div>
@@ -154,7 +154,7 @@ export default function HistoryPanel() {
           {selected.responseBody !== undefined && (
             <div className="mt-2">
               <h4 className="text-slate-200">Body de la respuesta</h4>
-              <pre className="font-mono whitespace-pre-wrap mt-1 max-h-48 overflow-auto rounded border border-slate-700 bg-slate-900 p-2 text-slate-100">
+              <pre className="no-scrollbar font-mono whitespace-pre-wrap mt-1 max-h-48 overflow-auto rounded border border-slate-700 bg-slate-900 p-2 text-slate-100">
                 {selected.responseBody}
               </pre>
             </div>

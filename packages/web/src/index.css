@@ -58,6 +58,17 @@ body {
   animation: estela-connector 0.5s ease-out 1.4s both;
 }
 
+/* Scrollbar invisible pero con desplazamiento intacto (rueda, tactil,
+   teclado). Se aplica a las columnas del dashboard y a las listas internas. */
+.no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

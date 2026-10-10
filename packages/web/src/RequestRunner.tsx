@@ -3,6 +3,7 @@ import { executeRequest } from "@devtool/core";
 import type { HttpRequestInput, HttpResponseInfo } from "@devtool/core";
 import RequestForm from "./components/RequestForm";
 import ResponseViewer from "./components/ResponseViewer";
+import { EXTENSION_INSTALL_URL } from "./config";
 import { ExtensionIndicator } from "./ui/primitives";
 import { useCorrelationStore } from "./lib/correlation-store";
 import { saveHistory, toHistoryEntry } from "./lib/db";
@@ -54,7 +55,7 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps) {
     <section className="w-full rounded-xl border border-slate-700 bg-slate-900/80 p-5 shadow-xl">
       <h2 className="text-xl font-semibold text-slate-100">Request runner</h2>
       <div className="mt-2 text-sm" role="status" aria-live="polite">
-        <ExtensionIndicator state={extStatus} />
+        <ExtensionIndicator state={extStatus} installHref={EXTENSION_INSTALL_URL} />
       </div>
       <div className="mt-4">
         <RequestForm onSend={(input) => void handleSend(input)} sending={sending} />

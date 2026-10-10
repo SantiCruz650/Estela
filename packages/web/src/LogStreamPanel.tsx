@@ -39,6 +39,18 @@ const sourceLabels: Record<SourceType, string> = {
   remote: "Backend remoto (tail)",
 };
 
+const sourceTooltips: Record<SourceType, string> = {
+  mock: "Genera logs falsos en memoria para ver la correlación sin backend.",
+  "opfs-demo": "Escribe a un .log virtual (OPFS) simulando un backend, y lo lee en vivo.",
+  "file-picker": "Abre un .log real tuyo y lo sigue en vivo (File System Access API).",
+  remote: "Hace tail de /logs/tail de un backend que exponga esa ruta.",
+};
+
+const sourceGroups: Array<{ label: string; keys: SourceType[] }> = [
+  { label: "Demo", keys: ["mock", "opfs-demo"] },
+  { label: "Tus datos", keys: ["file-picker", "remote"] },
+];
+
 function formatTimestamp(timestamp: string | null): string {
   if (timestamp === null) {
     return "--:--:--";
@@ -239,22 +251,34 @@ export default function LogStreamPanel() {
         </div>
       </div>
 
-      <div className="mt-4 inline-flex flex-wrap gap-1 rounded-lg bg-slate-800/60 p-1">
-        {(Object.entries(sourceLabels) as Array<[SourceType, string]>).map(([key, label]) => (
-          <button
-            key={key}
-            className={`rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
-              selectedSource === key
-                ? "bg-slate-700 text-cyan-200"
-                : "text-slate-400 hover:text-slate-200"
-            }`}
-            onClick={() => {
-              void handleSourceChange(key);
-            }}
-            type="button"
-          >
-            {label}
-          </button>
+      <div className="mt-4 flex flex-wrap gap-4">
+        {sourceGroups.map((group) => (
+          <div key={group.label}>
+            <p className="font-mono text-xs uppercase tracking-widest text-slate-500">
+              {group.label}
+            </p>
+            <div className="mt-1 inline-flex flex-wrap gap-1 rounded-lg bg-slate-800/60 p-1">
+              {group.keys.map((key) => (
+                <button
+                  key={key}
+                  className={`group relative rounded-md px-3 py-1.5 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60 ${
+                    selectedSource === key
+                      ? "bg-slate-700 text-cyan-200"
+                      : "text-slate-400 hover:text-slate-200"
+                  }`}
+                  onClick={() => {
+                    void handleSourceChange(key);
+                  }}
+                  type="button"
+                >
+                  {sourceLabels[key]}
+                  <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-2 hidden -translate-x-1/2 whitespace-nowrap rounded bg-slate-800 px-2 py-1 text-xs text-slate-200 shadow-lg group-hover:block group-focus-within:block">
+                    {sourceTooltips[key]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         ))}
       </div>
 
@@ -290,7 +314,7 @@ export default function LogStreamPanel() {
           <EmptyState message="Sin logs todavía — pulsa Iniciar stream" />
         </div>
       ) : (
-      <ul className="mt-5 max-h-[32rem] space-y-1 overflow-y-auto font-mono text-sm" aria-live="polite">
+      <ul className="no-scrollbar mt-5 max-h-[32rem] space-y-1 overflow-y-auto font-mono text-sm" aria-live="polite">
         {lines.map((line) => {
           const requestId = line.requestIds[0];
           return (

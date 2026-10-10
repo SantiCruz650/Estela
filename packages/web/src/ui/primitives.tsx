@@ -133,6 +133,7 @@ type ExtensionState = "checking" | "connected" | "unavailable";
 
 interface ExtensionIndicatorProps {
   state: ExtensionState;
+  installHref?: string;
 }
 
 const EXTENSION_CONFIG: Record<ExtensionState, { pill: string; dot: string; text: string }> = {
@@ -153,12 +154,22 @@ const EXTENSION_CONFIG: Record<ExtensionState, { pill: string; dot: string; text
   },
 };
 
-export function ExtensionIndicator({ state }: ExtensionIndicatorProps): JSX.Element {
+export function ExtensionIndicator({ state, installHref }: ExtensionIndicatorProps): JSX.Element {
   const config = EXTENSION_CONFIG[state];
   return (
     <span className={`inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm ${config.pill}`}>
       <span className={`inline-block h-2 w-2 rounded-full ${config.dot}`} aria-hidden="true" />
       {config.text}
+      {state === "unavailable" && installHref !== undefined && (
+        <a
+          href={installHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-xs text-slate-400 underline-offset-2 transition-colors hover:text-cyan-300 hover:underline"
+        >
+          instalar extensión
+        </a>
+      )}
     </span>
   );
 }
