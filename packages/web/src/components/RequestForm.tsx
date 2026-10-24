@@ -1,5 +1,7 @@
-import { useRef, useState } from "react";
-import type { HttpRequestInput } from "@devtool/core";
+import { useEffect, useRef, useState } from "react";import type { HttpRequestInput } from "@devtool/core";
+import { methodColorClass } from "../lib/method-styles";
+import { newRequestId } from "../lib/request-id";
+import { useResponseStore } from "../lib/response-store";
 
 type RequestFormProps = {
   onSend: (input: HttpRequestInput) => void;
@@ -7,158 +9,253 @@ type RequestFormProps = {
   sending: boolean;
 };
 
+export interface RequestDefaults {
+  method: string;
+  url: string;
+  body: string;
+  headers: Array<{ key: string; value: string }>;
+  nonce: number;
+}
+
 type HeaderRow = {
   id: string;
   key: string;
   value: string;
-  enabled: boolean;
 };
 
-const REQUEST_URL_KEY = "devtool.requestUrl";
-const DEFAULT_URL = "http://localhost:3000/api/users";
-const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"];
+const STORAGE_URL_KEY = "estela.requestUrl";
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
+const CONTROLS_HEIGHT = "h-[44px]";
+const NO_BODY_METHODS = new Set(["GET", "HEAD"]);
 
-function newRequestId(): string {
-  if (typeof crypto.randomUUID === "function") {
-    return crypto.randomUUID();
-  }
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  bytes[6] = (bytes[6] & 0x0f) | 0x40;
-  bytes[8] = (bytes[8] & 0x3f) | 0x80;
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+let rowIdCounter = 0;
+function nextRowId(): string {
+  rowIdCounter += 1;
+  return `hdr-${rowIdCounter}`;
 }
 
-export default function RequestForm({ onSend, onCancel, sending }: RequestFormProps) {
-  const [method, setMethod] = useState("GET");
-  const [url, setUrl] = useState(() => localStorage.getItem(REQUEST_URL_KEY) ?? DEFAULT_URL);
-  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([{ id: "row-0", key: "", value: "", enabled: true }]);
-  const [body, setBody] = useState("");
-  const rowCounter = useRef(1);
+export default function RequestForm({ onSend, onCancel, sending }: RequestFormProps): JSX.Element {
+  const [method, setMethod] = useState<string>("GET");
+  const [url, setUrl] = useState<string>(() => localStorage.getItem(STORAGE_URL_KEY) ?? "http://localhost:3000/api/users");
+  const [headerRows, setHeaderRows] = useState<HeaderRow[]>([{ id: nextRowId(), key: "", value: "" }]);
+  const [body, setBody] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<"headers" | "body">("headers");
+  const selection = useResponseStore((state) => state.selection);
+  const lastAppliedNonce = useRef(selection?.nonce ?? 0);
 
-  const showBody = method !== "GET" && method !== "HEAD";
+  // Carga desde historial: método, URL, headers y body vuelven al formulario.
+  useEffect(() => {
+    if (selection === null || selection.nonce === lastAppliedNonce.current) {
+      return;
+    }
+    lastAppliedNonce.current = selection.nonce;
+    const { entry } = selection;
+    setMethod(entry.method.toUpperCase());
+    setUrl(entry.url);
+    const rows: HeaderRow[] = Object.entries(entry.requestHeaders ?? {})
+      .filter(([key]) => key.toLowerCase() !== "x-request-id")
+      .map(([key, value]) => ({ id: nextRowId(), key, value }));
+    setHeaderRows(rows.length > 0 ? rows : [{ id: nextRowId(), key: "", value: "" }]);
+    setBody(entry.requestBody ?? "");
+  }, [selection]);
+
+  const noBody = NO_BODY_METHODS.has(method.toUpperCase());
+  const customRequestId = headerRows.find((row) => row.key.trim().toLowerCase() === "x-request-id")?.value.trim();
 
   function addHeaderRow(): void {
-    const id = `row-${rowCounter.current}`;
-    rowCounter.current += 1;
-    setHeaderRows((rows) => [...rows, { id, key: "", value: "", enabled: true }]);
+    setHeaderRows((rows) => [...rows, { id: nextRowId(), key: "", value: "" }]);
   }
 
   function removeHeaderRow(id: string): void {
-    setHeaderRows((rows) => rows.filter((row) => row.id !== id));
+    setHeaderRows((rows) => {
+      const rest = rows.filter((row) => row.id !== id);
+      return rest.length > 0 ? rest : [{ id: nextRowId(), key: "", value: "" }];
+    });
   }
 
   function updateHeaderRow(id: string, patch: Partial<HeaderRow>): void {
     setHeaderRows((rows) => rows.map((row) => (row.id === id ? { ...row, ...patch } : row)));
   }
 
-  function handleSend(): void {
+  function send(): void {
+    if (url.trim() === "") {
+      return;
+    }
     const headers: Record<string, string> = {};
     for (const row of headerRows) {
-      if (row.enabled && row.key.trim() !== "") {
-        headers[row.key] = row.value;
+      if (row.key.trim() !== "") {
+        headers[row.key.trim()] = row.value;
       }
     }
-    onSend({ method, url, headers, body: body || undefined, requestId: newRequestId() });
+    onSend({
+      method: method.toUpperCase(),
+      url,
+      headers,
+      body: noBody ? undefined : body === "" ? undefined : body,
+      requestId: customRequestId !== undefined && customRequestId !== "" ? customRequestId : newRequestId(),
+    });
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>): void {
+    if (event.key === "Enter" && (event.ctrlKey || event.metaKey) && !sending) {
+      event.preventDefault();
+      send();
+    }
   }
 
   return (
-    <div>
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <select
-          className="rounded border border-slate-600 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-cyan-400"
-          onChange={(event) => setMethod(event.target.value)}
-          value={method}
-        >
-          {METHODS.map((m) => (
-            <option key={m} value={m}>
-              {m}
-            </option>
-          ))}
-        </select>
-        <input
-          className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-3 py-2 text-slate-100 outline-none focus:border-cyan-400"
-          onChange={(event) => {
-            setUrl(event.target.value);
-            localStorage.setItem(REQUEST_URL_KEY, event.target.value);
-          }}
-          type="url"
-          value={url}
-        />
-        <div className="flex gap-2">
-          <button
-            className="rounded-md bg-cyan-400 px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
-            disabled={sending || url.trim() === ""}
-            onClick={handleSend}
-            type="button"
+    <div onKeyDown={handleKeyDown} className="flex flex-col gap-3">
+      {/* Fila de controles */}
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="flex min-w-[130px] flex-col gap-1">
+          <label htmlFor="req-method" className="sr-only">
+            Método HTTP
+          </label>
+          <select
+            id="req-method"
+            className={`${CONTROLS_HEIGHT} w-full rounded-[10px] border border-line bg-bg px-3 font-mono text-[13px] font-semibold ${methodColorClass(method)} outline-none focus-visible:ring-2 focus-visible:ring-accent/60`}
+            value={method}
+            onChange={(event) => setMethod(event.target.value)}
           >
-            Enviar
-          </button>
-          {sending && (
-            <button
-              className="rounded-md border border-red-400/60 px-4 py-2 font-medium text-red-300 transition hover:border-red-400 hover:bg-red-400/10"
-              onClick={onCancel}
-              type="button"
-            >
-              Cancelar
-            </button>
-          )}
+            {METHODS.map((m) => (
+              <option key={m} value={m} className={methodColorClass(m)}>
+                {m}
+              </option>
+            ))}
+          </select>
         </div>
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <label htmlFor="req-url" className="sr-only">
+            URL del request
+          </label>
+          <input
+            id="req-url"
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            spellCheck={false}
+            className={`${CONTROLS_HEIGHT} min-w-0 rounded-[10px] border border-line bg-bg px-3 font-mono text-[13.5px] text-code outline-none focus-visible:ring-2 focus-visible:ring-accent/60`}
+            value={url}
+            onChange={(event) => {
+              setUrl(event.target.value);
+              localStorage.setItem(STORAGE_URL_KEY, event.target.value);
+            }}
+            placeholder="http://localhost:3000/…"
+          />
+        </div>
+        <button
+          type="button"
+          className={`${CONTROLS_HEIGHT} shrink-0 rounded-[10px] bg-accent px-5 font-semibold text-accent-ink transition-colors hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50`}
+          onClick={send}
+          disabled={sending || url.trim() === ""}
+        >
+          Enviar
+        </button>
+        {sending && (
+          <button
+            type="button"
+            className={`${CONTROLS_HEIGHT} shrink-0 rounded-[10px] border border-err/60 px-4 font-medium text-err transition-colors hover:bg-err/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60`}
+            onClick={onCancel}
+          >
+            Cancelar
+          </button>
+        )}
       </div>
 
-      <div className="mt-4">
-        <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-slate-300">Headers</h3>
-          <button
-            className="rounded border border-slate-600 px-2 py-1 text-sm text-slate-200 transition hover:border-cyan-400"
-            onClick={addHeaderRow}
-            type="button"
-          >
-            + header
-          </button>
-        </div>
+      {/* Pestañas Headers/Body */}
+      <div className="flex items-baseline gap-5 border-b border-line" role="tablist" aria-label="Secciones del request">
+        {(["headers", "body"] as const).map((tab) => {
+          const isActive = activeTab === tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              role="tab"
+              aria-pressed={isActive}
+              aria-selected={isActive}
+              className={`-mb-px border-b-2 px-1 py-2 text-[13px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                isActive ? "border-accent font-semibold text-ink" : "border-transparent text-ink-2 hover:text-ink"
+              }`}
+              onClick={() => setActiveTab(tab)}
+            >
+              {tab === "headers" ? "Headers" : "Body"}
+            </button>
+          );
+        })}
+        <span className="ml-auto hidden pb-2 font-mono text-[12px] text-dim sm:block">Ctrl + Enter envía</span>
+      </div>
+
+      {activeTab === "headers" ? (
         <div className="flex flex-col gap-2">
+          {/* X-Request-ID: fila fija con borde punteado */}
+          <div className="flex items-center gap-2 rounded-[10px] border border-dashed border-line-strong px-3 py-2 font-mono text-[12.5px]">
+            <span className="text-info">X-Request-ID</span>
+            <span className="text-dim">|</span>
+            <span className="min-w-0 flex-1 truncate text-dim">
+              {customRequestId !== undefined && customRequestId !== ""
+                ? customRequestId
+                : "automático · uno nuevo en cada envío"}
+            </span>
+          </div>
           {headerRows.map((row) => (
-            <div key={row.id} className={`flex items-center gap-2 ${row.enabled ? "" : "opacity-50"}`}>
+            <div key={row.id} className="flex items-center gap-2">
+              <label htmlFor={`${row.id}-name`} className="sr-only">
+                Nombre del header
+              </label>
               <input
-                checked={row.enabled}
-                onChange={(event) => updateHeaderRow(row.id, { enabled: event.target.checked })}
-                type="checkbox"
-              />
-              <input
-                className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-400"
-                onChange={(event) => updateHeaderRow(row.id, { key: event.target.value })}
-                placeholder="key"
+                id={`${row.id}-name`}
+                className="min-h-[36px] min-w-0 flex-1 rounded-[10px] border border-line bg-bg px-3 font-mono text-[12.5px] text-info outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                 value={row.key}
+                placeholder="Header-Name"
+                spellCheck={false}
+                onChange={(event) => updateHeaderRow(row.id, { key: event.target.value })}
               />
               <input
-                className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-2 py-1 text-sm text-slate-100 outline-none focus:border-cyan-400"
-                onChange={(event) => updateHeaderRow(row.id, { value: event.target.value })}
-                placeholder="value"
+                className="min-h-[36px] min-w-0 flex-1 rounded-[10px] border border-line bg-bg px-3 font-mono text-[12.5px] text-code outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                 value={row.value}
+                placeholder="valor"
+                spellCheck={false}
+                onChange={(event) => updateHeaderRow(row.id, { value: event.target.value })}
               />
               <button
-                className="rounded px-2 py-1 text-sm text-slate-400 transition hover:text-red-300"
-                onClick={() => removeHeaderRow(row.id)}
                 type="button"
+                aria-label={`Quitar header ${row.key}`}
+                className="min-h-[36px] w-9 shrink-0 rounded-[10px] text-ink-2 transition-colors hover:bg-err/10 hover:text-err focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                onClick={() => removeHeaderRow(row.id)}
               >
                 ✕
               </button>
             </div>
           ))}
+          {/* Pie: candado + nota + añadir header */}
+          <div className="flex flex-wrap items-center gap-2 pt-1 text-[12px] text-dim">
+            <span aria-hidden="true">🔒</span>
+            <span>Authorization y Cookie no se guardan en el historial.</span>
+            <button
+              type="button"
+              className="ml-auto min-h-[36px] rounded-[10px] border border-line px-3 text-ink-2 transition-colors hover:border-accent hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+              onClick={addHeaderRow}
+            >
+              + header
+            </button>
+          </div>
         </div>
-      </div>
-
-      {showBody && (
-        <div className="mt-4">
-          <h3 className="mb-2 text-sm font-semibold text-slate-300">Body</h3>
+      ) : (
+        <div>
+          <label htmlFor="req-body" className="sr-only">
+            Body del request
+          </label>
           <textarea
-            className="font-mono w-full rounded border border-slate-600 bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-cyan-400"
+            id="req-body"
+            className="min-h-[140px] w-full rounded-[10px] border border-line bg-bg px-3 py-2 font-mono text-[13px] text-code outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+            value={noBody ? "" : body}
+            disabled={noBody}
+            spellCheck={false}
+            placeholder={noBody ? "GET no lleva body." : `{"clave": "valor"}`}
+            rows={6}
             onChange={(event) => setBody(event.target.value)}
-            rows={8}
-            value={body}
           />
+          {noBody && <p className="mt-1 text-[12px] text-dim">GET no lleva body.</p>}
         </div>
       )}
     </div>

@@ -1,11 +1,11 @@
-<!-- punto cian = la request (el evento); las 2 rayas con opacidad
-  decreciente = la estela/rastro que se apaga con el tiempo (opacidad =
-  antiguedad del log); lectura secundaria = las ventanas que Estela
-  colapsa en una. Glifo unico: header/landing + favicon. -->
+<!-- Logotipo Estela: punto sólido a la derecha = la request (el evento vivo);
+     los dos trazos a la izquierda se desvanecen hacia atrás = la estela/rastro
+     de logs que se apaga con la antigüedad. Cian de marca #22D3EE.
+     Glifo único: header/landing + dashboard + favicon. -->
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <g stroke="#22d3ee" stroke-linecap="round" fill="none">
-    <line x1="4" y1="21" x2="14" y2="21" stroke-width="4" opacity="0.45"/>
-    <line x1="10" y1="12" x2="20" y2="12" stroke-width="4" opacity="0.85"/>
+  <g stroke="#22D3EE" stroke-linecap="round" fill="none">
+    <path d="M3 12h12" stroke-width="3.5" opacity="0.3"/>
+    <path d="M7 21h12" stroke-width="4.5" opacity="0.65"/>
   </g>
-  <circle cx="24" cy="12" r="6" fill="#22d3ee"/>
+  <circle cx="24" cy="16" r="6" fill="#22D3EE"/>
 </svg>

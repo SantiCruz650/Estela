@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 export default function CtaFooter(): JSX.Element {
   return (
     <footer className="border-t border-slate-800">
-      <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-3 px-4 py-28 text-center">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center gap-3 px-4 py-16 text-center">
         <h2 className="max-w-prose font-sans text-3xl font-extrabold tracking-tight text-slate-50">
           Deja de saltar entre 4 ventanas
         </h2>

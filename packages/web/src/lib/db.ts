@@ -41,7 +41,8 @@ export function redactHeaders(
 export class DevtoolDB extends Dexie {
   history!: Table<HistoryEntry, string>;
   constructor() {
-    super("devtool");
+    // Marca renombrada: "devtool" → "estela" (aún no hay usuarios, sin migración).
+    super("estela");
     this.version(1).stores({ history: "requestId, startedAt, method, status" });
   }
 }

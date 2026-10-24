@@ -17,10 +17,28 @@ beforeEach(() => {
     requests: [],
     correlator: new Correlator(2),
     selectedRequestId: null,
+    buffer: [],
+    trailColors: {},
   });
 });
 
 describe("correlation store", () => {
+  it("asigna el color de rastro cíclicamente por orden de llegada", () => {
+    const store = useCorrelationStore.getState();
+    store.recordRequest(request("req-a"));
+    store.recordRequest(request("req-b"));
+    store.recordRequest(request("req-c"));
+    store.recordRequest(request("req-a", 2));
+
+    const colors = useCorrelationStore.getState().trailColors;
+    expect(colors["req-a"]).toBe(0);
+    expect(colors["req-b"]).toBe(1);
+    expect(colors["req-c"]).toBe(2);
+    // reenvío del mismo request conserva su color
+    expect(colors["req-a"]).toBe(0);
+    expect(useCorrelationStore.getState().getTrailColorIndex("req-b")).toBe(1);
+  });
+
   it("keeps recent requests first and caps them at 50", () => {
     for (let index = 0; index < 51; index += 1) {
       useCorrelationStore.getState().recordRequest(request(`id-${index}`, index));
@@ -54,6 +72,14 @@ describe("correlation store", () => {
     expect(result?.matchingLines.map((line) => line.raw)).toEqual([`INFO matched [req=${requestId}]`]);
     expect(result?.contextBefore.map((line) => line.raw)).toEqual(["INFO before"]);
     expect(result?.contextAfter.map((line) => line.raw)).toEqual(["WARN after"]);
+  });
+
+  it("ingest acumula el buffer completo", () => {
+    useCorrelationStore.getState().ingest([parseLine("INFO first", "a.log")]);
+    useCorrelationStore.getState().ingest([parseLine("WARN second", "a.log")]);
+    const buffer = useCorrelationStore.getState().buffer;
+    expect(buffer).toHaveLength(2);
+    expect(buffer[0]?.raw).toBe("INFO first");
   });
 
   it("returns null for an unknown request", () => {

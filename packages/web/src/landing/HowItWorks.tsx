@@ -1,8 +1,9 @@
-const STEPS: Array<{ n: string; title: string; text: string }> = [
+const STEPS: Array<{ n: string; title: string; text: string; code?: string }> = [
   {
     n: "1",
-    title: "Pega tu localhost",
-    text: "Tu URL, tu método. Sin importar colecciones ni crear workspaces.",
+    title: "Corre npx @estela-dev/cli",
+    code: "npx @estela-dev/cli",
+    text: "Un comando y el streamer ya escucha tu localhost. Sin instalar nada más.",
   },
   {
     n: "2",
@@ -18,7 +19,7 @@ const STEPS: Array<{ n: string; title: string; text: string }> = [
 
 export default function HowItWorks(): JSX.Element {
   return (
-    <section id="como-funciona" className="mx-auto w-full max-w-7xl scroll-mt-20 px-4 py-28">
+    <section id="como-funciona" className="mx-auto w-full max-w-7xl scroll-mt-20 px-4 py-16 lg:py-20">
       <p className="font-mono text-sm text-amber-300">02</p>
       <h2 className="mt-2 max-w-prose text-2xl font-bold tracking-tight text-slate-100">
         Tres gestos y lo ves
@@ -33,6 +34,14 @@ export default function HowItWorks(): JSX.Element {
               {step.n}
             </span>
             <h3 className="mt-3 font-semibold text-slate-100">{step.title}</h3>
+            {step.code !== undefined && (
+              <p className="mt-2 overflow-x-auto rounded-md border border-slate-700 bg-slate-950 px-3 py-2 font-mono text-xs text-cyan-300">
+                <span aria-hidden="true" className="select-none text-slate-500">
+                  ${" "}
+                </span>
+                {step.code}
+              </p>
+            )}
             <p className="mt-1 max-w-prose text-sm text-slate-400">{step.text}</p>
           </li>
         ))}

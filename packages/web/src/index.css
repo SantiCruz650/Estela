@@ -1,5 +1,50 @@
 @import "tailwindcss";
 
+/* Geist autohospedada (woff2 en public/fonts): la CSP de netlify.toml
+   solo permite font-src 'self', así que sin Google Fonts ni CDNs. */
+@font-face {
+  font-family: "Geist";
+  src: url("/fonts/Geist-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Geist Mono";
+  src: url("/fonts/GeistMono-Variable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "Cascadia Mono", monospace;
+
+  /* Tokens de marca /app (ver DashboardLayout). Solo se usan ahí; la
+     landing mantiene sus utilidades slate-* habituales. */
+  --color-bg: #070A12;
+  --color-surface: #0D1220;
+  --color-surface-2: #111829;
+  --color-elevated: #1A2336;
+  --color-line: #1C2538;
+  --color-line-strong: #2A3550;
+  --color-ink: #E6EAF2;
+  --color-ink-2: #B8C2D4;
+  --color-dim: #8A94A8;
+  --color-code: #C9D1E0;
+  --color-accent: #22D3EE;
+  --color-accent-ink: #04131A;
+  --color-ok: #34D399;
+  --color-err: #FB7185;
+  --color-info: #7DB4FF;
+  --color-debug: #A3ADC2;
+  --color-warn: #F5B83D;
+  --color-violet: #A78BFA;
+  --color-violet-2: #C4B5FD;
+}
+
 body {
   margin: 0;
 }
@@ -56,6 +101,37 @@ body {
 
 .animate-connector {
   animation: estela-connector 0.5s ease-out 1.4s both;
+}
+
+/* Entrada de cada línea de la tarjeta animada del hero (HeroDemo). */
+@keyframes estela-demo-enter {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.demo-enter {
+  animation: estela-demo-enter 0.3s ease-out both;
+}
+
+/* Punto de estado "En vivo" (panel de logs del dashboard). */
+@keyframes estela-live-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgb(52 211 153 / 0.45);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgb(52 211 153 / 0);
+  }
+}
+
+.animate-live-pulse {
+  animation: estela-live-pulse 1.6s ease-in-out infinite;
 }
 
 /* Scrollbar invisible pero con desplazamiento intacto (rueda, tactil,

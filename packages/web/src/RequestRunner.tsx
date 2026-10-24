@@ -3,85 +3,110 @@ import { executeRequest } from "@devtool/core";
 import type { HttpRequestInput, HttpResponseInfo } from "@devtool/core";
 import RequestForm from "./components/RequestForm";
 import ResponseViewer from "./components/ResponseViewer";
-import { EXTENSION_INSTALL_URL, getCliToken, isCliMode } from "./config";
-import { ExtensionIndicator } from "./ui/primitives";
+import { getCliToken, isCliMode } from "./config";
 import { useCorrelationStore } from "./lib/correlation-store";
+import { useResponseStore } from "./lib/response-store";
+import { useSourceStore } from "./lib/source-state";
 import { saveHistory, toHistoryEntry } from "./lib/db";
 import { executeRequestViaCli } from "./lib/cli-bridge";
 import { executeRequestViaExtension } from "./lib/extension-bridge";
+import { dispatchDemoRequest } from "./lib/demo-run";
 import type { ExtensionStatus } from "./hooks/useExtensionStatus";
 
 interface RequestRunnerProps {
   extStatus: ExtensionStatus;
 }
 
-export default function RequestRunner({ extStatus }: RequestRunnerProps) {
+export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.Element {
   const [sending, setSending] = useState(false);
-  const [response, setResponse] = useState<HttpResponseInfo | null>(null);
+  const response = useResponseStore((state) => state.response);
+  const input = useResponseStore((state) => state.input);
   const abortRef = useRef<AbortController | null>(null);
 
   function handleCancel(): void {
     abortRef.current?.abort();
   }
 
-  async function handleSend(input: HttpRequestInput): Promise<void> {
+  async function recordAndSave(inputValue: HttpRequestInput, res: HttpResponseInfo): Promise<void> {
+    useCorrelationStore.getState().recordRequest({
+      requestId: res.requestId,
+      method: inputValue.method,
+      url: inputValue.url,
+      statusCode: res.status,
+      startedAt: Date.now(),
+      durationMs: res.durationMs,
+    });
+    try {
+      await saveHistory(toHistoryEntry(inputValue, res));
+    } catch (error) {
+      console.warn("No se pudo guardar en historial:", error);
+    }
+  }
+
+  async function handleSend(inputValue: HttpRequestInput): Promise<void> {
     setSending(true);
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      let res: HttpResponseInfo;
       if (isCliMode()) {
         // Modo CLI: SIN fallback a fetch directo (CORS volvería a romper).
-        // Si el proxy falla (403, red caída…), se muestra el error tal cual.
         try {
-          res = await executeRequestViaCli(input, getCliToken() ?? "", controller.signal);
+          const res = await executeRequestViaCli(inputValue, getCliToken() ?? "", controller.signal);
+          if (controller.signal.aborted) {
+            return;
+          }
+          useResponseStore.getState().setResponse(res, inputValue);
+          await recordAndSave(inputValue, res);
         } catch (error) {
           if (controller.signal.aborted) {
             return;
           }
-          setResponse({
-            requestId: input.requestId,
-            status: 0,
-            statusText: "",
-            responseHeaders: {},
-            bodyText: error instanceof Error ? error.message : String(error),
-            bodyTruncated: false,
-            bytesRead: 0,
-            durationMs: 0,
-            error: "network",
-          });
-          return;
+          useResponseStore.getState().setResponse(
+            {
+              requestId: inputValue.requestId,
+              status: 0,
+              statusText: "",
+              responseHeaders: {},
+              bodyText: error instanceof Error ? error.message : String(error),
+              bodyTruncated: false,
+              bytesRead: 0,
+              durationMs: 0,
+              error: "network",
+            },
+            inputValue,
+          );
         }
-      } else if (extStatus === "connected") {
+        return;
+      }
+
+      const source = useSourceStore.getState().source;
+      if (source === "demo") {
+        // Fuente demo: responder en memoria, sin red.
+        const res = await dispatchDemoRequest(inputValue);
+        useResponseStore.getState().setResponse(res, inputValue);
+        return;
+      }
+
+      if (extStatus === "connected") {
         try {
-          res = await executeRequestViaExtension(input, controller.signal);
-        } catch (e) {
+          const res = await executeRequestViaExtension(inputValue, controller.signal);
           if (controller.signal.aborted) {
             return;
           }
-          console.warn("Extensión falló, usando fetch directo:", e);
-          res = await executeRequest(input, fetch, { signal: controller.signal });
+          useResponseStore.getState().setResponse(res, inputValue);
+          await recordAndSave(inputValue, res);
+          return;
+        } catch (error) {
+          console.warn("Extensión falló, usando fetch directo:", error);
+          // cae al fetch directo
         }
-      } else {
-        res = await executeRequest(input, fetch, { signal: controller.signal });
       }
+      const result = await executeRequest(inputValue, fetch, { signal: controller.signal });
       if (controller.signal.aborted) {
         return;
       }
-      setResponse(res);
-      useCorrelationStore.getState().recordRequest({
-        requestId: res.requestId,
-        method: input.method,
-        url: input.url,
-        statusCode: res.status,
-        startedAt: Date.now(),
-        durationMs: res.durationMs,
-      });
-      try {
-        await saveHistory(toHistoryEntry(input, res));
-      } catch (e) {
-        console.warn("No se pudo guardar en historial:", e);
-      }
+      useResponseStore.getState().setResponse(result, inputValue);
+      await recordAndSave(inputValue, result);
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;
@@ -91,15 +116,17 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps) {
   }
 
   return (
-    <section className="w-full rounded-xl border border-slate-700 bg-slate-900/80 p-5 shadow-xl">
-      <h2 className="text-xl font-semibold text-slate-100">Request runner</h2>
-      <div className="mt-2 text-sm" role="status" aria-live="polite">
-        <ExtensionIndicator state={extStatus} installHref={EXTENSION_INSTALL_URL} />
-      </div>
-      <div className="mt-4">
-        <RequestForm onSend={(input) => void handleSend(input)} onCancel={handleCancel} sending={sending} />
-      </div>
-      <ResponseViewer response={response} />
-    </section>
+    <div className="flex min-w-0 flex-col gap-4">
+      <section className="rounded-[14px] border border-line bg-surface p-4" aria-label="Request">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-2">Request</h2>
+        <div className="mt-3">
+          <RequestForm onSend={(value) => void handleSend(value)} onCancel={handleCancel} sending={sending} />
+        </div>
+      </section>
+      <section className="rounded-[14px] border border-line bg-surface p-4 min-w-0" aria-label="Respuesta">
+        <h2 className="text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-2">Respuesta</h2>
+        <ResponseViewer response={response} input={input} />
+      </section>
+    </div>
   );
 }

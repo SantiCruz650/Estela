@@ -70,3 +70,7 @@ Vive en Netlify: `esteladev.netlify.app` (build `npm run build -w web`, redirect
 - `packages/extension` — puente MV3, se agrega en fase posterior.
 - `packages/demo-backend` — API local de prueba que loguea con request ID.
 - `packages/cli` — `npx estela`: sirve el build local con proxy `/api/proxy` y tail `/api/tail` (solo builtins de Node, sin dependencias).
+
+## Tipografías
+
+Geist y Geist Mono (autohospedadas en packages/web/public/fonts) están bajo la SIL Open Font License 1.1 — ver [OFL.txt](./packages/web/public/fonts/OFL.txt).

@@ -1,18 +1,44 @@
+import type { ReactNode } from "react";
 import { LogLevelTag, MethodBadge, StatusBadge } from "../ui/primitives";
 
 interface SideFeature {
   title: string;
-  text: string;
+  text: ReactNode;
 }
 
 const SIDE_FEATURES: SideFeature[] = [
   {
     title: "Tus datos no salen de aquí",
-    text: "Tu .log se lee en tu navegador. Cuando cierras la pestaña, no queda nada fuera.",
+    text: (
+      <>
+        Tu .log se lee en tu navegador. Cuando cierras la pestaña, no queda
+        nada fuera.{" "}
+        <span className="text-slate-300">
+          No nos creas: el código es abierto (
+          <a
+            href="https://github.com/SantiCruz650/Estela"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-cyan-300 underline-offset-2 transition-colors hover:text-cyan-200 hover:underline"
+          >
+            AGPL
+          </a>
+          ).{" "}
+        </span>
+        <a
+          href="https://github.com/SantiCruz650/Estela"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-cyan-300 underline-offset-2 transition-colors hover:text-cyan-200 hover:underline"
+        >
+          Ver el código en GitHub →
+        </a>
+      </>
+    ),
   },
   {
-    title: "Empiezas en un minuto",
-    text: "Sin cuentas ni tarjetas. Abres /app, pegas tu localhost y disparas.",
+    title: "Un comando y listo",
+    text: "npx @estela-dev/cli. Sin cuentas ni tarjetas.",
   },
   {
     title: "Una pantalla, nada más",
@@ -22,7 +48,7 @@ const SIDE_FEATURES: SideFeature[] = [
 
 export default function Features(): JSX.Element {
   return (
-    <section className="mx-auto w-full max-w-7xl px-4 py-28">
+    <section className="mx-auto w-full max-w-7xl px-4 py-16 lg:py-20">
       <p className="font-mono text-sm text-amber-300">01</p>
       <h2 className="mt-2 max-w-prose text-2xl font-bold tracking-tight text-slate-100">
         Deja de cazar tu request entre ventanas

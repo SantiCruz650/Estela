@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { copyText } from "../lib/clipboard";
 
 interface MethodBadgeProps {
   method: string;
@@ -75,14 +76,13 @@ export function CopyButton({ text, label }: CopyButtonProps): JSX.Element {
   const [copied, setCopied] = useState(false);
 
   async function handleCopy(): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
+    const ok = await copyText(text);
+    if (ok) {
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1200);
-    } catch (err) {
-      console.warn("[copy failed]", err);
+    } else {
+      console.warn("[copy failed]");
     }
-    // TODO post-MVP: fallback con document.execCommand("copy") si clipboard API falla.
   }
 
   return (
