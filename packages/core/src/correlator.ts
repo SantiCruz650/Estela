@@ -1,5 +1,14 @@
 import type { LogLine } from "./types.js";
 
+/**
+ * Match por string exacto del X-Request-ID en el raw de la línea.
+ * Cubre IDs que la regex UUID v4 no captura (formatos no-UUID).
+ * requestId vacío no matchea para evitar que "" sea match universal.
+ */
+function lineMatchesRawId(raw: string, requestId: string): boolean {
+  return requestId.length > 0 && raw.includes(requestId);
+}
+
 export interface RequestRecord {
   requestId: string;       // el UUID que enviamos como X-Request-ID
   method: string;
@@ -57,7 +66,7 @@ export class Correlator {
 
     const lines = this.currentLines();
     const matchingIndexes = lines.reduce<number[]>((indexes, line, index) => {
-      if (line.requestIds.includes(requestId)) {
+      if (line.requestIds.includes(requestId) || lineMatchesRawId(line.raw, requestId)) {
         indexes.push(index);
       }
       return indexes;

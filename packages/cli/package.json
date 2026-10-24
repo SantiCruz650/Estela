@@ -1,0 +1,45 @@
+{
+  "name": "@estela-dev/cli",
+  "version": "0.1.0",
+  "description": "Estela en local: sirve la app y puentea tu backend sin CORS (solo 127.0.0.1).",
+  "keywords": [
+    "api-client",
+    "logs",
+    "correlation",
+    "local-first",
+    "localhost"
+  ],
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SantiCruz650/devtool.git",
+    "directory": "packages/cli"
+  },
+  "type": "module",
+  "bin": {
+    "estela": "./dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json && node scripts/copy-web-dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build -w web --prefix ../.. && npm run build"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2",
+    "vitest": "^5.0.1"
+  }
+}

@@ -122,12 +122,31 @@ describe("Correlator", () => {
     expect(correlator.correlate(requestId)?.matchingLines).toEqual([newest]);
   });
 
-  it("returns null when the ID exists only in context", () => {
+  it("matches raw lines whose text contains the exact request id (any format)", () => {
     const correlator = new Correlator(2);
     correlator.upsertRequest(request(contextRequestId));
-    correlator.upsertRequest(request());
-    correlator.ingestLines([line(`context mentions ${contextRequestId}`), line("match", [requestId])]);
+    const mention = line(`context mentions ${contextRequestId}`);
+    correlator.ingestLines([mention, line("match", [requestId])]);
 
-    expect(correlator.correlate(contextRequestId)).toBeNull();
+    // Antes devolvía null (solo miraba requestIds extraídos por regex).
+    // Ahora el raw que contiene el id exacto también correlaciona.
+    expect(correlator.correlate(contextRequestId)?.matchingLines).toEqual([mention]);
+  });
+
+  it("matches non-UUID request ids embedded in raw text", () => {
+    const correlator = new Correlator(2);
+    correlator.upsertRequest(request("req-abc-42"));
+    const mention = line("POST /pay id=req-abc-42 ok");
+    correlator.ingestLines([mention]);
+
+    expect(correlator.correlate("req-abc-42")?.matchingLines).toEqual([mention]);
+  });
+
+  it("does not correlate unknown ids", () => {
+    const correlator = new Correlator(2);
+    correlator.upsertRequest(request());
+    correlator.ingestLines([line("processed req-10 batch")]);
+
+    expect(correlator.correlate("never-registered")).toBeNull();
   });
 });

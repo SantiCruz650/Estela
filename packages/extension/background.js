@@ -1,7 +1,22 @@
 const VERSION = "0.1.0";
 const MAX_BODY_CHARS = 1_000_000;
 
+// Orígenes permitidos para enviar mensajes al service worker (mismos que content_scripts.matches).
+const ALLOWED_SENDER_ORIGINS = new Set([
+  "https://esteladev.netlify.app",
+  "http://localhost",
+  "http://127.0.0.1",
+]);
+
+function isAllowedSender(sender) {
+  const origin = sender?.origin ?? (sender?.url ? new URL(sender.url).origin : "");
+  return ALLOWED_SENDER_ORIGINS.has(origin);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (!isAllowedSender(sender)) {
+    return false;
+  }
   if (msg?.type === "PING") {
     sendResponse({ version: VERSION });
     return false;

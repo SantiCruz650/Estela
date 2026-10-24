@@ -129,7 +129,7 @@ export function Panel({ title, children, actions }: PanelProps): JSX.Element {
   );
 }
 
-type ExtensionState = "checking" | "connected" | "unavailable";
+type ExtensionState = "checking" | "connected" | "unavailable" | "local";
 
 interface ExtensionIndicatorProps {
   state: ExtensionState;
@@ -151,6 +151,11 @@ const EXTENSION_CONFIG: Record<ExtensionState, { pill: string; dot: string; text
     pill: "border-slate-600 bg-slate-800 text-slate-300",
     dot: "bg-slate-400",
     text: "Extensión no disponible",
+  },
+  local: {
+    pill: "border-cyan-400/50 bg-cyan-400/10 text-cyan-200",
+    dot: "bg-cyan-400",
+    text: "Modo local",
   },
 };
 

@@ -16,6 +16,28 @@ export interface HistoryEntry {
 
 export const MAX_STORED_BODY = 10_000;
 
+/** Headers cuyo valor jamás se persiste en el historial (solo lo que se guarda, no lo que se envía). */
+const REDACTED_HEADER_NAMES = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+  "x-api-key",
+]);
+
+export function redactHeaders(
+  headers: Record<string, string> | undefined,
+): Record<string, string> | undefined {
+  if (headers === undefined) {
+    return undefined;
+  }
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    result[key] = REDACTED_HEADER_NAMES.has(key.toLowerCase()) ? "[redacted]" : value;
+  }
+  return result;
+}
+
 export class DevtoolDB extends Dexie {
   history!: Table<HistoryEntry, string>;
   constructor() {
@@ -44,7 +66,7 @@ export function toHistoryEntry(input: HttpRequestInput, res: HttpResponseInfo): 
     durationMs: res.durationMs,
     startedAt: Date.now(),
     backendRequestId: res.backendRequestId,
-    requestHeaders: input.headers,
+    requestHeaders: redactHeaders(input.headers),
     requestBody: truncatePreview(input.body),
     responseBody: truncatePreview(res.bodyText),
   };

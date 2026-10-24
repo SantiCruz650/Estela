@@ -16,3 +16,13 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Seguridad: CSP estricta para SPA Vite sin terceros.
+# connect-src permite solo 'self' + localhost/127.0.0.1 (requests del usuario y tails).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Content-Security-Policy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://localhost:* http://127.0.0.1:*; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+

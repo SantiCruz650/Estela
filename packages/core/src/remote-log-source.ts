@@ -17,6 +17,7 @@ export class RemoteLogSource implements LogSource {
   private readonly fetchImpl: typeof fetch;
   private readonly readFrom: "start" | "end";
   private readonly onError: ((err: unknown) => void) | undefined;
+  private readonly headers: Record<string, string>;
   private readonly subscribers = new Set<(lines: LogLine[]) => void>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
   private offset: number | null = null;
@@ -30,6 +31,8 @@ export class RemoteLogSource implements LogSource {
       fetchImpl?: typeof fetch;
       readFrom?: "start" | "end";
       onError?: (err: unknown) => void;
+      /** Headers extra en cada poll (p. ej. token del CLI local). */
+      headers?: Record<string, string>;
     } = {},
   ) {
     this.makeUrl = makeUrl;
@@ -37,6 +40,7 @@ export class RemoteLogSource implements LogSource {
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.readFrom = opts.readFrom ?? "end";
     this.onError = opts.onError;
+    this.headers = opts.headers ?? {};
     const initialUrl = makeUrl(0);
     const host = new URL(initialUrl).host;
     this.id = `remote:${host}`;
@@ -78,7 +82,9 @@ export class RemoteLogSource implements LogSource {
     }
 
     try {
-      const response = await this.fetchImpl(this.makeUrl(this.offset ?? 0));
+      const response = await this.fetchImpl(this.makeUrl(this.offset ?? 0), {
+        headers: this.headers,
+      });
       if (this.stopped) {
         return;
       }

@@ -17,7 +17,23 @@ export default function ResponseViewer({ response }: ResponseViewerProps) {
     );
     return (
       <p className="mt-4 rounded border border-red-400/50 bg-red-400/10 px-3 py-2 text-sm text-red-200">
-        No se pudo conectar al backend.
+        {response.bodyText !== "" ? response.bodyText : "No se pudo conectar al backend."}
+      </p>
+    );
+  }
+
+  if (response.error === "timeout") {
+    return (
+      <p className="mt-4 rounded border border-red-400/50 bg-red-400/10 px-3 py-2 text-sm text-red-200">
+        La request tardó demasiado y se canceló (30 s).
+      </p>
+    );
+  }
+
+  if (response.error === "aborted") {
+    return (
+      <p className="mt-4 text-sm text-slate-400">
+        Request cancelada.
       </p>
     );
   }

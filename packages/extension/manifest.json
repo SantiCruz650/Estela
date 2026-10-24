@@ -1,14 +1,18 @@
 {
   "manifest_version": 3,
-  "name": "DevTool Local Bridge",
+  "name": "Estela Bridge",
   "version": "0.1.0",
-  "description": "Puente CORS para el API client local-first de DevTool. Ejecuta requests HTTP hacia localhost sin restricciones de CORS.",
+  "description": "Puente CORS para el API client local-first de Estela. Ejecuta requests HTTP hacia localhost sin restricciones de CORS.",
   "permissions": [],
   "host_permissions": ["http://localhost/*", "http://127.0.0.1/*"],
   "background": { "service_worker": "background.js" },
   "content_scripts": [
     {
-      "matches": ["http://localhost/*", "http://127.0.0.1/*", "https://*/*"],
+      "matches": [
+        "https://esteladev.netlify.app/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
       "js": ["content-script.js"],
       "run_at": "document_start"
     }

@@ -1,6 +1,6 @@
 import "fake-indexeddb/auto";
 import { beforeEach, describe, expect, it } from "vitest";
-import { db, getHistory, listHistory, MAX_STORED_BODY, pruneHistory, saveHistory, toHistoryEntry } from "./db";
+import { db, getHistory, listHistory, MAX_STORED_BODY, pruneHistory, redactHeaders, saveHistory, toHistoryEntry } from "./db";
 import type { HistoryEntry } from "./db";
 
 function entry(requestId: string, startedAt: number): HistoryEntry {
@@ -74,5 +74,49 @@ describe("history db", () => {
 
     const rows = await listHistory(10);
     expect(rows.map((row) => row.requestId)).toEqual(["id-b", "id-c", "id-a"]);
+  });
+
+  it("e) toHistoryEntry redacta headers sensibles sin tocar el input original", () => {
+    const input = {
+      method: "POST",
+      url: "https://api.test/pay",
+      headers: {
+        Authorization: "Bearer super-secret",
+        Cookie: "session=abc",
+        "Set-Cookie": "session=abc",
+        "Proxy-Authorization": "Basic dXNlcjpwYXNz",
+        "x-api-key": "key-123",
+        "Content-Type": "application/json",
+        "X-Request-ID": "req-1",
+      },
+      requestId: "req-1",
+    };
+
+    const result = toHistoryEntry(input, {
+      requestId: "req-1",
+      status: 200,
+      statusText: "OK",
+      responseHeaders: {},
+      bodyText: "ok",
+      bodyTruncated: false,
+      bytesRead: 2,
+      durationMs: 5,
+    });
+
+    expect(result.requestHeaders).toEqual({
+      Authorization: "[redacted]",
+      Cookie: "[redacted]",
+      "Set-Cookie": "[redacted]",
+      "Proxy-Authorization": "[redacted]",
+      "x-api-key": "[redacted]",
+      "Content-Type": "application/json",
+      "X-Request-ID": "req-1",
+    });
+    // El objeto original NO se muta (el request que se envía conserva el valor real).
+    expect(input.headers.Authorization).toBe("Bearer super-secret");
+  });
+
+  it("f) redactHeaders devuelve undefined si headers es undefined", () => {
+    expect(redactHeaders(undefined)).toBeUndefined();
   });
 });

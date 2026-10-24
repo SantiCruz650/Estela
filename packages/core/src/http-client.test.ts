@@ -102,4 +102,72 @@ describe("executeRequest", () => {
 
     expect(sentBody).toBeUndefined();
   });
+
+  it("g) timeout por defecto: si fetch no resuelve devuelve error timeout", async () => {
+    const fetcher = vi.fn((_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      });
+    });
+
+    const result = await executeRequest(input(), fetcher as typeof fetch, { timeoutMs: 10 });
+
+    expect(result.error).toBe("timeout");
+    expect(result.status).toBe(0);
+    expect(result.requestId).toBe("our-id-1");
+  });
+
+  it("h) AbortSignal externo abortado devuelve error aborted", async () => {
+    const controller = new AbortController();
+    const fetcher = vi.fn((_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("The operation was aborted.", "AbortError"));
+        });
+      });
+    });
+
+    const promise = executeRequest(input(), fetcher as typeof fetch, {
+      signal: controller.signal,
+      timeoutMs: 60_000,
+    });
+    controller.abort();
+    const result = await promise;
+
+    expect(result.error).toBe("aborted");
+    expect(result.status).toBe(0);
+  });
+
+  it("i) el signal recibido por fetch es el combinado externo+timeout", async () => {
+    let seenSignal: AbortSignal | undefined;
+    const controller = new AbortController();
+    const fetcher = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      seenSignal = init?.signal ?? undefined;
+      return mockResponse({ body: "ok" });
+    });
+
+    await executeRequest(input(), fetcher as typeof fetch, {
+      signal: controller.signal,
+      timeoutMs: 60_000,
+    });
+
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
+    expect(seenSignal?.aborted).toBe(false);
+  });
+
+  it("j) signal externo ya abortado no dispara fetch", async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const fetcher = vi.fn(async () => mockResponse({ body: "ok" }));
+
+    const result = await executeRequest(input(), fetcher as typeof fetch, {
+      signal: controller.signal,
+      timeoutMs: 60_000,
+    });
+
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(result.error).toBe("aborted");
+  });
 });

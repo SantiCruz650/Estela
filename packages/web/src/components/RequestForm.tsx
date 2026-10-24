@@ -3,6 +3,7 @@ import type { HttpRequestInput } from "@devtool/core";
 
 type RequestFormProps = {
   onSend: (input: HttpRequestInput) => void;
+  onCancel: () => void;
   sending: boolean;
 };
 
@@ -29,7 +30,7 @@ function newRequestId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export default function RequestForm({ onSend, sending }: RequestFormProps) {
+export default function RequestForm({ onSend, onCancel, sending }: RequestFormProps) {
   const [method, setMethod] = useState("GET");
   const [url, setUrl] = useState(() => localStorage.getItem(REQUEST_URL_KEY) ?? DEFAULT_URL);
   const [headerRows, setHeaderRows] = useState<HeaderRow[]>([{ id: "row-0", key: "", value: "", enabled: true }]);
@@ -85,14 +86,25 @@ export default function RequestForm({ onSend, sending }: RequestFormProps) {
           type="url"
           value={url}
         />
-        <button
-          className="rounded-md bg-cyan-400 px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
-          disabled={sending || url.trim() === ""}
-          onClick={handleSend}
-          type="button"
-        >
-          Enviar
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="rounded-md bg-cyan-400 px-4 py-2 font-medium text-slate-950 transition hover:bg-cyan-300 disabled:opacity-50"
+            disabled={sending || url.trim() === ""}
+            onClick={handleSend}
+            type="button"
+          >
+            Enviar
+          </button>
+          {sending && (
+            <button
+              className="rounded-md border border-red-400/60 px-4 py-2 font-medium text-red-300 transition hover:border-red-400 hover:bg-red-400/10"
+              onClick={onCancel}
+              type="button"
+            >
+              Cancelar
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-4">

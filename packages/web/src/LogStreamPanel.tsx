@@ -9,6 +9,8 @@ import {
 } from "@devtool/core";
 import { createOpfsDemoHandle, OpfsLogSimulator, pickLogFile } from "./lib/fs-bridge";
 import { useCorrelationStore } from "./lib/correlation-store";
+import { CLI_TOKEN_HEADER } from "./lib/cli-bridge";
+import { getCliToken, isCliMode } from "./config";
 import { CopyButton, EmptyState, LogLevelTag, MethodBadge, StatusBadge } from "./ui/primitives";
 
 type SourceType = "mock" | "opfs-demo" | "file-picker" | "remote";
@@ -36,14 +38,16 @@ const sourceLabels: Record<SourceType, string> = {
   mock: "Mock (en memoria)",
   "opfs-demo": "Simular backend (demo)",
   "file-picker": "Conectar archivo .log",
-  remote: "Backend remoto (tail)",
+  remote: isCliMode() ? "CLI (tail local)" : "Backend remoto (tail)",
 };
 
 const sourceTooltips: Record<SourceType, string> = {
   mock: "Genera logs falsos en memoria para ver la correlación sin backend.",
   "opfs-demo": "Escribe a un .log virtual (OPFS) simulando un backend, y lo lee en vivo.",
   "file-picker": "Abre un .log real tuyo y lo sigue en vivo (File System Access API).",
-  remote: "Hace tail de /logs/tail de un backend que exponga esa ruta.",
+  remote: isCliMode()
+    ? "Hace tail de los archivos --log del CLI local (GET /api/tail)."
+    : "Hace tail de /logs/tail de un backend que exponga esa ruta.",
 };
 
 const sourceGroups: Array<{ label: string; keys: SourceType[] }> = [
@@ -122,7 +126,10 @@ export default function LogStreamPanel() {
 
     try {
       if (nextSource === "mock") {
-        const source = new MockLogSource();
+        const source = new MockLogSource("mock-log-source", "Mock log source", {
+          requestIdProvider: () =>
+            useCorrelationStore.getState().requests.map((request) => request.requestId).slice(0, 10),
+        });
         const unsubscribe = source.subscribe(appendSourceLines);
         await source.start();
         activeSourceRef.current = {
@@ -162,13 +169,23 @@ export default function LogStreamPanel() {
       }
 
       if (nextSource === "remote") {
-        const base = remoteBase.trim().replace(/\/+$/, "");
-        if (base === "") {
-          throw new Error("Indica la base URL del backend remoto.");
+        const cliToken = getCliToken();
+        let source;
+        if (cliToken !== null) {
+          // Modo CLI local: tail automático contra /api/tail con el token inyectado.
+          source = new RemoteLogSource((offset) => `/api/tail?offset=${offset}`, {
+            headers: { [CLI_TOKEN_HEADER]: cliToken },
+            onError: () => setConsecutiveErrors((count) => count + 1),
+          });
+        } else {
+          const base = remoteBase.trim().replace(/\/+$/, "");
+          if (base === "") {
+            throw new Error("Indica la base URL del backend remoto.");
+          }
+          source = new RemoteLogSource((offset) => `${base}/logs/tail?offset=${offset}`, {
+            onError: () => setConsecutiveErrors((count) => count + 1),
+          });
         }
-        const source = new RemoteLogSource((offset) => `${base}/logs/tail?offset=${offset}`, {
-          onError: () => setConsecutiveErrors((count) => count + 1),
-        });
         const unsubscribe = source.subscribe(appendSourceLines);
         await source.start();
         activeSourceRef.current = {
@@ -282,7 +299,7 @@ export default function LogStreamPanel() {
         ))}
       </div>
 
-      {selectedSource === "remote" && (
+      {selectedSource === "remote" && !isCliMode() && (
         <label className="mt-4 block text-sm text-slate-300">
           Base URL del backend
           <input

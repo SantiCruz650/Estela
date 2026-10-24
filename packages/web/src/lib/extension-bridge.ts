@@ -13,22 +13,50 @@ interface BridgeMessage {
   bridgeError?: unknown;
 }
 
+/**
+ * Decide si un MessageEvent del bridge es de confianza.
+ * Reglas: mismo origen que la página y source === window (no iframes ni popups).
+ * Exportado puro para poder testearlo sin DOM.
+ */
+export function isTrustedBridgeEvent(
+  origin: string,
+  source: unknown,
+  expectedOrigin: string,
+  expectedSource: unknown,
+): boolean {
+  return origin === expectedOrigin && source === expectedSource;
+}
+
 function post(msg: unknown): void {
-  window.postMessage(msg, "*");
+  window.postMessage(msg, window.location.origin);
 }
 
 function waitForMessage<T>(
   type: string,
   predicate: (m: BridgeMessage) => boolean,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<T> {
   return new Promise<T>((resolve, reject) => {
+    if (signal?.aborted === true) {
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+      return;
+    }
+
     const timer = window.setTimeout(() => {
-      window.removeEventListener("message", onMessage);
+      cleanup();
       reject(new Error("timeout"));
     }, timeoutMs);
 
+    function onAbort(): void {
+      cleanup();
+      reject(new DOMException("The operation was aborted.", "AbortError"));
+    }
+
     function onMessage(event: MessageEvent): void {
+      if (!isTrustedBridgeEvent(event.origin, event.source, window.location.origin, window)) {
+        return;
+      }
       const data = event.data as BridgeMessage | null | undefined;
       if (data === null || data === undefined || typeof data !== "object") {
         return;
@@ -45,12 +73,18 @@ function waitForMessage<T>(
       if (!ok) {
         return;
       }
-      window.clearTimeout(timer);
-      window.removeEventListener("message", onMessage);
+      cleanup();
       resolve(data as unknown as T);
     }
 
+    function cleanup(): void {
+      window.clearTimeout(timer);
+      window.removeEventListener("message", onMessage);
+      signal?.removeEventListener("abort", onAbort);
+    }
+
     window.addEventListener("message", onMessage);
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -64,12 +98,19 @@ export async function isExtensionAvailable(): Promise<boolean> {
   }
 }
 
-export async function executeRequestViaExtension(input: HttpRequestInput): Promise<HttpResponseInfo> {
+export async function executeRequestViaExtension(
+  input: HttpRequestInput,
+  signal?: AbortSignal,
+): Promise<HttpResponseInfo> {
+  if (signal?.aborted === true) {
+    throw new DOMException("The operation was aborted.", "AbortError");
+  }
   post({ source: TAG, type: "EXECUTE_REQUEST", payload: input });
   const msg = await waitForMessage<BridgeMessage>(
     "EXECUTE_RESPONSE",
     (m) => m.requestId === input.requestId,
     REQUEST_TIMEOUT_MS,
+    signal,
   );
   if (msg.bridgeError !== null && msg.bridgeError !== undefined) {
     throw new Error(typeof msg.bridgeError === "string" ? msg.bridgeError : "bridgeError");

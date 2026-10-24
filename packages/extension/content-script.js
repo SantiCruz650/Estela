@@ -10,7 +10,7 @@ window.addEventListener("message", (event) => {
     chrome.runtime.sendMessage({ type: "PING" }, (resp) => {
       window.postMessage(
         { source: "devtool-extension", type: "DEVTOOL_PONG", version: resp?.version ?? null },
-        "*",
+        window.location.origin,
       );
     });
     return;
@@ -25,7 +25,7 @@ window.addEventListener("message", (event) => {
           response: resp ?? null,
           bridgeError: chrome.runtime.lastError ? String(chrome.runtime.lastError) : null,
         },
-        "*",
+        window.location.origin,
       );
     });
     return;

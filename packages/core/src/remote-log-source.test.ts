@@ -182,4 +182,27 @@ describe("RemoteLogSource", () => {
     expect(received).toEqual(["WARN new"]);
     await source.stop();
   });
+
+  it("sends the configured headers on every poll", async () => {
+    const seenHeaders: Array<Record<string, string> | undefined> = [];
+    const fetchImpl = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const headers = init?.headers as Record<string, string> | undefined;
+      seenHeaders.push(headers);
+      return { json: async () => ({ size: 10, truncated: false, data: "INFO hola\n" }) } as Response;
+    }) as unknown as typeof fetch;
+    const source = new RemoteLogSource(() => "https://api.test/logs", {
+      fetchImpl,
+      readFrom: "start",
+      headers: { "X-Estela-Token": "abc123" },
+    });
+    const received: string[] = [];
+    source.subscribe((lines) => received.push(...lines.map((line) => line.raw)));
+    await source.start();
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(received).toEqual(["INFO hola"]);
+    expect(seenHeaders).toHaveLength(1);
+    expect(seenHeaders[0]).toEqual({ "X-Estela-Token": "abc123" });
+    await source.stop();
+  });
 });
