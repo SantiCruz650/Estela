@@ -1,5 +1,5 @@
 import type { ExtensionStatus } from "../hooks/useExtensionStatus";
-import { isCliMode, REPO_URL } from "../config";
+import { isCliMode } from "../config";
 import { connectionView } from "../lib/connection";
 import { useLogLineStore } from "../lib/log-buffer";
 import { useSourceStore } from "../lib/source-state";
@@ -30,17 +30,6 @@ export default function AppHeader({ extStatus }: { extStatus: ExtensionStatus })
             <span className="text-[12.5px] font-semibold text-ink">{view.label}</span>
             <span className="hidden font-mono text-[12px] text-dim sm:inline">{view.detail}</span>
           </span>
-          <span className="hidden font-mono text-[12px] text-dim md:inline" title="Atajo del formulario">
-            Ctrl + Enter envía
-          </span>
-          <a
-            href={REPO_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="min-h-[32px] px-1 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
-          >
-            GitHub
-          </a>
         </span>
       </div>
       {/* El contador de líneas vive aquí para feed del indicador (tests de pausa en log-buffer). */}

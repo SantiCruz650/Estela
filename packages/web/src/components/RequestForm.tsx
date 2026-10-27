@@ -145,6 +145,8 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
         </div>
         <button
           type="button"
+          title="Ctrl + Enter"
+          aria-keyshortcuts="Control+Enter"
           className={`${CONTROLS_HEIGHT} shrink-0 rounded-[10px] bg-accent px-5 font-semibold text-accent-ink transition-colors hover:bg-cyan-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-50`}
           onClick={send}
           disabled={sending || url.trim() === ""}
