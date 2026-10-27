@@ -69,7 +69,7 @@ Vive en Netlify: `esteladev.netlify.app` (build `npm run build -w web`, redirect
 - `packages/web` — React + Vite + Zustand + Dexie.
 - `packages/extension` — puente MV3, se agrega en fase posterior.
 - `packages/demo-backend` — API local de prueba que loguea con request ID.
-- `packages/cli` — `npx estela`: sirve el build local con proxy `/api/proxy` y tail `/api/tail` (solo builtins de Node, sin dependencias).
+- `packages/cli` — `npx @estela-dev/cli`: sirve el build local con proxy `/api/proxy` y tail `/api/tail` (solo builtins de Node, sin dependencias).
 
 ## Tipografías
 

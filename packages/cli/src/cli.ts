@@ -5,18 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { createCliServer, generateToken } from "./server.js";
-
-const USAGE = `Estela CLI — sirve Estela en local y puentea tu backend sin CORS.
-
-Uso:
-  npx estela [--port 4000] [--log ruta/al/archivo.log] [--no-open]
-
-Opciones:
-  --port <n>     Puerto (defecto 4000). Siempre escucha en 127.0.0.1.
-  --log <ruta>   Archivo de log a exponer en GET /api/tail (repetible).
-  --no-open     No abrir el navegador (útil en servidores o pruebas).
-  -h, --help     Muestra esta ayuda.
-`;
+import { USAGE } from "./usage.js";
 
 function openBrowser(url: string): void {
   let command: string;

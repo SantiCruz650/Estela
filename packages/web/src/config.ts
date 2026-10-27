@@ -8,12 +8,12 @@ export const EXTENSION_INSTALL_URL = `${REPO_URL}#correr-en-local`;
 
 declare global {
   interface Window {
-    /** Inyectado por el CLI local (npx estela) al servir index.html. */
+    /** Inyectado por el CLI local (npx @estela-dev/cli) al servir index.html. */
     __ESTELA_CLI_TOKEN__?: string;
   }
 }
 
-/** Devuelve el token del CLI si la app fue servida por `npx estela`; si no, null. */
+/** Devuelve el token del CLI si la app fue servida por `npx @estela-dev/cli`; si no, null. */
 export function getCliToken(): string | null {
   if (typeof window === "undefined") {
     return null;

@@ -17,7 +17,7 @@
   },
   "type": "module",
   "bin": {
-    "estela": "./dist/cli.js"
+    "estela": "dist/cli.js"
   },
   "files": [
     "dist",
@@ -36,7 +36,6 @@
     "lint": "tsc --noEmit",
     "prepublishOnly": "npm run build -w web --prefix ../.. && npm run build"
   },
-  "dependencies": {},
   "devDependencies": {
     "@types/node": "^24.13.3",
     "typescript": "~6.0.2",
