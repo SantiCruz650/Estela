@@ -73,12 +73,14 @@ export function tokenizeJson(json: string): JsonToken[] {
   return tokens;
 }
 
-/** Tokeniza el body de una respuesta; si no es JSON válido devuelve null. */
+/** Tokeniza el body de una respuesta formateado con JSON.stringify(parsed, null, 2);
+    si no es JSON válido devuelve null. */
 export function tokenizeBody(bodyText: string): JsonToken[] | null {
+  let parsed: unknown;
   try {
-    JSON.parse(bodyText);
+    parsed = JSON.parse(bodyText);
   } catch {
     return null;
   }
-  return tokenizeJson(JSON.stringify(JSON.parse(bodyText), null, 2));
+  return tokenizeJson(JSON.stringify(parsed, null, 2));
 }

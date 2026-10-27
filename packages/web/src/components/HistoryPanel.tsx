@@ -8,11 +8,17 @@ function clockTime(startedAt: number): string {
   return new Date(startedAt).toLocaleTimeString([], { hour12: false });
 }
 
-function shortPath(url: string): string {
-  if (url.length <= 42) {
-    return url;
+/** pathname+search de la URL (sin origen); el host solo si no es localhost:3000. */
+function urlView(url: string): { path: string; host: string | null } {
+  try {
+    const parsed = new URL(url);
+    return {
+      path: `${parsed.pathname}${parsed.search}`,
+      host: parsed.host === "localhost:3000" ? null : parsed.host,
+    };
+  } catch {
+    return { path: url, host: null };
   }
-  return `${url.slice(0, 40)}…`;
 }
 
 export default function HistoryPanel(): JSX.Element {
@@ -55,6 +61,7 @@ export default function HistoryPanel(): JSX.Element {
         {requests.map((request) => {
           const color = trailColor(getTrailColorIndex(request.requestId));
           const isSelected = request.requestId === selectedRequestId;
+          const { path, host } = urlView(request.url);
           const statusColor =
             request.statusCode === null
               ? "text-dim"
@@ -81,8 +88,11 @@ export default function HistoryPanel(): JSX.Element {
                   <span className={`shrink-0 font-mono text-[11.5px] font-semibold ${methodColorClass(request.method)}`}>
                     {request.method.toUpperCase()}
                   </span>
-                  <span className="min-w-0 truncate font-mono text-[12.5px] text-code">{shortPath(request.url)}</span>
+                  <span className="min-w-0 truncate font-mono text-[12.5px] text-code">{path}</span>
                 </span>
+                {host !== null && (
+                  <span className="mt-0.5 block truncate pl-4 text-[11px] text-dim">{host}</span>
+                )}
                 <span className="mt-0.5 flex items-center gap-2 pl-4 text-[11.5px] text-dim">
                   <span className={`font-semibold ${statusColor}`}>
                     {request.statusCode === null ? "…" : request.statusCode}

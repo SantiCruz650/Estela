@@ -13,6 +13,9 @@ import { methodColorClass } from "./lib/method-styles";
 import { CLI_TOKEN_HEADER } from "./lib/cli-bridge";
 import { getCliToken, isCliMode } from "./config";
 import { countByLevel, filterLines, levelFilterName, type LevelFilter } from "./lib/log-filter";
+import { cleanLogMessage } from "./lib/log-message";
+import { arrivalOf, formatClockMs, markArrival } from "./lib/line-arrival";
+import { pluralTrailErrors, pluralTrailLines, pluralTrailWarns } from "./lib/trail-counts";
 import { trailSpan } from "./lib/trail-gutter";
 import { hexToRgba, trailColor, TRAIL_LINE_ALPHA } from "./lib/trail-colors";
 import { DemoLogSource } from "./lib/demo-source";
@@ -22,14 +25,6 @@ const SOURCE_LABELS: Record<SourceId, string> = {
   file: "Archivo .log",
   remote: "Backend local",
 };
-
-function formatTimestamp(timestamp: string | null): string {
-  if (timestamp === null) {
-    return "--:--:--";
-  }
-  const date = new Date(timestamp);
-  return Number.isNaN(date.getTime()) ? "--:--:--" : date.toLocaleTimeString([], { hour12: false });
-}
 
 const LEVEL_BADGES: Record<string, string> = {
   info: "text-info bg-[rgba(96,165,250,0.12)]",
@@ -103,6 +98,7 @@ export default function LogStreamPanel(): JSX.Element {
 
       const append = (newLines: LogLine[]): void => {
         if (newLines.length > 0) {
+          markArrival(newLines);
           useLogLineStore.getState().appendLines(newLines);
           useCorrelationStore.getState().ingest(newLines);
         }
@@ -350,25 +346,27 @@ export default function LogStreamPanel(): JSX.Element {
             >
               <span
                 aria-hidden="true"
-                className="block h-[10px] w-[10px] rounded-full"
+                className="block h-[10px] w-[10px] shrink-0 rounded-full"
                 style={{ backgroundColor: color, boxShadow: `0 0 8px ${hexToRgba(color, 0.8)}` }}
               />
-              <span className="font-mono text-[12.5px] text-ink">
-                Rastro de{" "}
-                <span className={`font-semibold ${methodColorClass(selectedRequest.method)}`}>
-                  {selectedRequest.method.toUpperCase()}
-                </span>{" "}
-                {selectedRequest.url.replace(/^https?:\/\/[^/]+/, "")}
-              </span>
-              <span className="basis-full text-[12.5px] text-ink-2 sm:basis-auto">
-                {trailLines.length} líneas ·{" "}
-                {trailErrors === 0 ? "sin errores" : `${trailErrors} error(es)`} · {trailWarns} aviso(s) ·{" "}
-                {trailDuration === null ? "—" : `${Math.round(trailDuration)} ms de principio a fin`}
+              <span className="min-w-0 flex-[1_1_260px]">
+                <span className="block font-mono text-[12.5px] text-ink">
+                  Rastro de{" "}
+                  <span className={`font-semibold ${methodColorClass(selectedRequest.method)}`}>
+                    {selectedRequest.method.toUpperCase()}
+                  </span>{" "}
+                  {selectedRequest.url.replace(/^https?:\/\/[^/]+/, "")}
+                </span>
+                <span className="block text-[12.5px] text-ink-2">
+                  {pluralTrailLines(trailLines.length)} · {pluralTrailErrors(trailErrors)} ·{" "}
+                  {pluralTrailWarns(trailWarns)} ·{" "}
+                  {trailDuration === null ? "—" : `${Math.round(trailDuration)} ms de principio a fin`}
+                </span>
               </span>
               <button
                 type="button"
                 aria-pressed={soloTrail}
-                className="ml-auto min-h-[32px] rounded-[10px] border border-line-strong bg-elevated px-3 text-[12px] text-ink transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+                className="shrink-0 min-h-[32px] rounded-[10px] border border-line-strong bg-elevated px-3 text-[12px] text-ink transition-colors hover:border-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                 onClick={() => setSoloTrail(!soloTrail)}
               >
                 {soloTrail ? "Ver todos los logs" : "Solo este rastro"}
@@ -451,13 +449,19 @@ export default function LogStreamPanel(): JSX.Element {
                       ? trailColor(trailColors[id])
                       : null;
                   const inSpan = spanIdx !== null && i >= spanIdx.first && i <= spanIdx.last;
+                  const spanColor =
+                    inSpan && selectedRequestId !== null ? trailColor(trailColors[selectedRequestId] ?? 0) : null;
+                  const clockEpoch =
+                    line.timestamp !== null && !Number.isNaN(new Date(line.timestamp).getTime())
+                      ? new Date(line.timestamp).getTime()
+                      : arrivalOf(line);
                   return (
                     <div
                       key={line.id}
                       className="grid grid-cols-[22px_104px_62px_minmax(0,1fr)_84px] items-baseline gap-[10px] px-1 py-[3px] max-sm:grid-cols-[20px_54px_minmax(0,1fr)]"
                       style={isTrail && trailColorValue !== null ? { backgroundColor: hexToRgba(trailColorValue, 0.09) } : undefined}
                     >
-                      <span className="relative block h-[19px]">
+                      <span className="relative block self-stretch">
                         {isTrail && trailColorValue !== null && (
                           <span
                             aria-hidden="true"
@@ -465,12 +469,12 @@ export default function LogStreamPanel(): JSX.Element {
                             style={{ backgroundColor: trailColorValue, boxShadow: "0 0 0 3px #070A12" }}
                           />
                         )}
-                        {inSpan && trailColorValue !== null && spanIdx !== null && (
+                        {inSpan && spanColor !== null && spanIdx !== null && (
                           <span
                             aria-hidden="true"
                             className="absolute left-1/2 w-[2px] -translate-x-1/2"
                             style={{
-                              backgroundColor: hexToRgba(trailColorValue, TRAIL_LINE_ALPHA),
+                              backgroundColor: hexToRgba(spanColor, TRAIL_LINE_ALPHA),
                               top: i === spanIdx.first ? "50%" : 0,
                               bottom: i === spanIdx.last ? "50%" : 0,
                             }}
@@ -478,7 +482,7 @@ export default function LogStreamPanel(): JSX.Element {
                         )}
                       </span>
                       <time className="font-mono text-[11.5px] text-dim max-sm:hidden" dateTime={line.timestamp ?? undefined}>
-                        {formatTimestamp(line.timestamp)}
+                        {formatClockMs(clockEpoch)}
                       </time>
                       <span
                         className={`justify-center rounded-[5px] px-1.5 py-0.5 text-center text-[11px] font-semibold ${LEVEL_BADGES[line.level] ?? UNKNOWN_BADGE}`}
@@ -489,7 +493,7 @@ export default function LogStreamPanel(): JSX.Element {
                         className={`min-w-0 text-[12.5px] leading-[1.7] ${isTrail ? "text-[#F1F4F9]" : "text-code"}`}
                         style={{ overflowWrap: "anywhere" }}
                       >
-                        {line.raw.replace(/^\[[^\]]+\]\s*/, "")}
+                        {cleanLogMessage(line.raw, line.level, id)}
                       </span>
                       <span
                         className="text-right font-mono text-[11.5px] max-sm:hidden"

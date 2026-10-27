@@ -27,10 +27,12 @@ const ERROR_TEXTS: Record<NonNullable<HttpResponseInfo["error"]>, string> = {
   aborted: "Request cancelada.",
 };
 
-/** Bloque JSON coloreado con el tokenizador propio (solo <span>, sin HTML). */
+/** Bloque JSON coloreado con el tokenizador propio (solo <span>, sin HTML).
+    pre-wrap: el formato JSON.stringify(…, null, 2) necesita saltos y
+    sangría intactos. */
 function ColoredBody({ tokens }: { tokens: JsonToken[] }): JSX.Element {
   return (
-    <code>
+    <code className="block whitespace-pre-wrap">
       {tokens.map((token, i) => (
         <span key={`${i}-${token.kind}`} className={TOKEN_CLASSES[token.kind]}>
           {token.value}

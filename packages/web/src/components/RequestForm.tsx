@@ -182,7 +182,6 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
             </button>
           );
         })}
-        <span className="ml-auto hidden pb-2 font-mono text-[12px] text-dim sm:block">Ctrl + Enter envía</span>
       </div>
 
       {activeTab === "headers" ? (
@@ -223,14 +222,19 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
                 className="min-h-[36px] w-9 shrink-0 rounded-[10px] text-ink-2 transition-colors hover:bg-err/10 hover:text-err focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
                 onClick={() => removeHeaderRow(row.id)}
               >
-                ✕
+                <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+                  <path d="M2.8 2.8l6.4 6.4M9.2 2.8L2.8 9.2" />
+                </svg>
               </button>
             </div>
           ))}
           {/* Pie: candado + nota + añadir header */}
           <div className="flex flex-wrap items-center gap-2 pt-1 text-[12px] text-dim">
-            <span aria-hidden="true">🔒</span>
-            <span>Authorization y Cookie no se guardan en el historial.</span>
+              <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.3">
+                <rect x="2.6" y="6.2" width="8.8" height="5.8" rx="1.1" />
+                <path d="M4.7 6.2V4.6a2.3 2.3 0 0 1 4.6 0v1.6" strokeLinecap="round" />
+              </svg>
+              <span>Authorization y Cookie no se guardan en el historial.</span>
             <button
               type="button"
               className="ml-auto min-h-[36px] rounded-[10px] border border-line px-3 text-ink-2 transition-colors hover:border-accent hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"

@@ -63,7 +63,9 @@ export default function DemoNotice(): JSX.Element | null {
         className="ml-auto flex h-[36px] w-9 items-center justify-center rounded-[10px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
         onClick={close}
       >
-        ✕
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round">
+          <path d="M2.8 2.8l6.4 6.4M9.2 2.8L2.8 9.2" />
+        </svg>
       </button>
     </div>
   );
