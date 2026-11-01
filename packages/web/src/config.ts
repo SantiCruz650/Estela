@@ -10,6 +10,8 @@ declare global {
   interface Window {
     /** Inyectado por el CLI local (npx @estela-dev/cli) al servir index.html. */
     __ESTELA_CLI_TOKEN__?: string;
+    /** Nº de archivos --log que el CLI configuró; falta en un CLI antiguo. */
+    __ESTELA_CLI_LOG_COUNT__?: number;
   }
 }
 
@@ -20,6 +22,18 @@ export function getCliToken(): string | null {
   }
   const token = window.__ESTELA_CLI_TOKEN__;
   return typeof token === "string" && token !== "" ? token : null;
+}
+
+/**
+ * Nº de archivos --log del CLI (inyectado junto al token en el HTML).
+ * null si no hay dato: CLI antiguo, sin modo CLI, o valor no numérico.
+ */
+export function getCliLogCount(): number | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const count = window.__ESTELA_CLI_LOG_COUNT__;
+  return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : null;
 }
 
 /** true cuando corre dentro del CLI local (proxy /api/proxy y tail /api/tail disponibles). */

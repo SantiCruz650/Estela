@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { Correlator, type RequestRecord } from "./correlator.js";
+import { Correlator, probableRequestForLine, type RequestRecord } from "./correlator.js";
 import type { LogLine } from "./types.js";
 
 const requestId = "550e8400-e29b-41d4-a716-446655440000";
@@ -148,5 +148,92 @@ describe("Correlator", () => {
     correlator.ingestLines([line("processed req-10 batch")]);
 
     expect(correlator.correlate("never-registered")).toBeNull();
+  });
+});
+
+describe("probableRequestForLine (correlación probable por tiempo)", () => {
+  // Request A: corre de 1000 a 1100 (100 ms). Ventana +50 ms → [1000, 1150].
+  const reqA: RequestRecord = {
+    requestId: "req-a",
+    method: "GET",
+    url: "/api/a",
+    statusCode: 200,
+    startedAt: 1000,
+    durationMs: 100,
+  };
+  // Request B: corre de 1300 a 1350 (50 ms). Ventana +50 ms → [1300, 1400].
+  const reqB: RequestRecord = {
+    requestId: "req-b",
+    method: "POST",
+    url: "/api/b",
+    statusCode: 200,
+    startedAt: 1300,
+    durationMs: 50,
+  };
+
+  /** línea con timestamp parseable o null. */
+  function timeLine(raw: string, timestamp: string | null): LogLine {
+    return { id: raw, raw, timestamp, level: "info", requestIds: [], filePath: "app.log" };
+  }
+
+  it("asigna probable cuando el timestamp cae dentro de [inicio, fin + 50 ms]", () => {
+    expect(probableRequestForLine(timeLine("INFO creando usuario", new Date(1100).toISOString()), [reqA], 0)).toBe("req-a");
+    // Borde superior: fin + 50 exacto cuenta.
+    expect(probableRequestForLine(timeLine("x", new Date(1150).toISOString()), [reqA], 0)).toBe("req-a");
+    // Un ms después: fuera.
+    expect(probableRequestForLine(timeLine("x", new Date(1151).toISOString()), [reqA], 0)).toBeNull();
+    // Un ms antes del inicio: fuera.
+    expect(probableRequestForLine(timeLine("x", new Date(999).toISOString()), [reqA], 0)).toBeNull();
+  });
+
+  it("no asigna si el timestamp cae en la ventana de varios requests", () => {
+    const reqC: RequestRecord = { ...reqA, requestId: "req-c", durationMs: 200 };
+    const reqD: RequestRecord = { ...reqB, requestId: "req-d", startedAt: 1100, durationMs: 200 };
+    const l = timeLine("INFO shared moment", new Date(1150).toISOString());
+    expect(probableRequestForLine(l, [reqC, reqD], 0)).toBeNull();
+  });
+
+  it("lo seguro gana: una línea con el id exacto no es probable", () => {
+    const secure = timeLine("POST /b id=req-b 200", new Date(2000).toISOString());
+    // Caería en ninguna ventana de req-a, pero aunque cayese en otra, no es probable.
+    expect(probableRequestForLine(secure, [reqA, reqB], 0)).toBeNull();
+
+    const secureInOtherWindow = timeLine("req-a inicializado", new Date(1400).toISOString());
+    expect(probableRequestForLine(secureInOtherWindow, [reqA, reqB], 0)).toBeNull();
+  });
+
+  it("no asigna si la línea ya pertenece (requestIds) a otro request conocido", () => {
+    const l: LogLine = {
+      id: "l",
+      raw: "WARN orden duplicada",
+      timestamp: new Date(1100).toISOString(),
+      level: "warn",
+      requestIds: ["req-b"],
+      filePath: "app.log",
+    };
+    expect(probableRequestForLine(l, [reqA, reqB], 0)).toBeNull();
+  });
+
+  it("sin timestamp usa la hora de llegada con ventana [inicio, fin + 400 ms]", () => {
+    const noTs = timeLine("INFO sin timestamp", null);
+    expect(probableRequestForLine(noTs, [reqA], 1300)).toBe("req-a"); // 1100+200 <= 1500
+    expect(probableRequestForLine(noTs, [reqA], 1500)).toBe("req-a"); // borde fin+400
+    expect(probableRequestForLine(noTs, [reqA], 1501)).toBeNull();    // fuera
+  });
+
+  it("una línea CON timestamp no usa la ventana amplia de llegada", () => {
+    const withTs = timeLine("INFO tardío", new Date(1300).toISOString());
+    // Con timestamp solo aplica [inicio, fin+50] = [1000, 1150]: 1300 está fuera.
+    expect(probableRequestForLine(withTs, [reqA], 1100)).toBeNull();
+  });
+
+  it("ignora timestamps parseables de otros días (fuera de cualquier ventana)", () => {
+    expect(probableRequestForLine(timeLine("INFO viejo", new Date(5_000_000_000).toISOString()), [reqA], 1100)).toBeNull();
+  });
+
+  it("request sin duración (en curso) mantiene la ventana abierta hasta conocerla", () => {
+    const running: RequestRecord = { ...reqA, durationMs: null };
+    const l = timeLine("INFO durante el vuelo", new Date(5000).toISOString());
+    expect(probableRequestForLine(l, [running], 0)).toBe("req-a");
   });
 });

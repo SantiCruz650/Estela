@@ -23,9 +23,17 @@ export default function PrivacidadPage(): JSX.Element {
           </p>
           <p>
             No usamos cookies innecesarias ni servicios de terceros para
-            rastrearte. Si tienes dudas, escríbenos y lo aclaramos.
+            rastrearte. Si tienes dudas, escríbenos a{" "}
+            <a
+              href="mailto:esteladevsupport@gmail.com"
+              className="text-cyan-300 underline-offset-2 transition-colors hover:text-cyan-200 hover:underline"
+            >
+              esteladevsupport@gmail.com
+            </a>{" "}
+            y lo aclaramos.
           </p>
         </div>
+        <p className="mt-6 text-sm text-slate-500">Última actualización: octubre de 2026.</p>
         <Link
           to="/"
           className="mt-8 inline-block rounded-md border border-slate-600 px-5 py-2.5 font-medium text-slate-200 transition-colors hover:border-cyan-400 hover:text-cyan-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"

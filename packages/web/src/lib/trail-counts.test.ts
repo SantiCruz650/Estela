@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { pluralTrailErrors, pluralTrailLines, pluralTrailWarns } from "./trail-counts";
+import { pluralProbableLines, pluralSecureLines, pluralTrailErrors, pluralTrailWarns } from "./trail-counts";
 
 describe("plurales de la barra del rastro", () => {
-  it("líneas: 1 línea / N líneas", () => {
-    expect(pluralTrailLines(1)).toBe("1 línea");
-    expect(pluralTrailLines(2)).toBe("2 líneas");
-    expect(pluralTrailLines(17)).toBe("17 líneas");
+  it("líneas seguras: 1 línea segura / N líneas seguras", () => {
+    expect(pluralSecureLines(0)).toBe("0 líneas seguras");
+    expect(pluralSecureLines(1)).toBe("1 línea segura");
+    expect(pluralSecureLines(2)).toBe("2 líneas seguras");
+    expect(pluralSecureLines(17)).toBe("17 líneas seguras");
+  });
+
+  it("probables: 0 probables / 1 probable / N probables", () => {
+    expect(pluralProbableLines(0)).toBe("0 probables");
+    expect(pluralProbableLines(1)).toBe("1 probable");
+    expect(pluralProbableLines(2)).toBe("2 probables");
   });
 
   it("errores: sin errores / 1 error / N errores", () => {

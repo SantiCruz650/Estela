@@ -11,14 +11,17 @@ import { useLogLineStore } from "./lib/log-buffer";
 import { useSourceStore, type SourceId } from "./lib/source-state";
 import { methodColorClass } from "./lib/method-styles";
 import { CLI_TOKEN_HEADER } from "./lib/cli-bridge";
-import { getCliToken, isCliMode } from "./config";
 import { countByLevel, filterLines, levelFilterName, type LevelFilter } from "./lib/log-filter";
 import { cleanLogMessage } from "./lib/log-message";
 import { arrivalOf, formatClockMs, markArrival } from "./lib/line-arrival";
-import { pluralTrailErrors, pluralTrailLines, pluralTrailWarns } from "./lib/trail-counts";
+import { pluralProbableLines, pluralSecureLines, pluralTrailErrors, pluralTrailWarns } from "./lib/trail-counts";
+import { isSecureLineFor, probableLineIds } from "./lib/probable-trail";
 import { trailSpan } from "./lib/trail-gutter";
 import { hexToRgba, trailColor, TRAIL_LINE_ALPHA } from "./lib/trail-colors";
 import { DemoLogSource } from "./lib/demo-source";
+import CodeBlock from "./components/CodeBlock";
+import CorrelationHint from "./components/CorrelationHint";
+import { getCliLogCount, getCliToken, isCliMode } from "./config";
 
 const SOURCE_LABELS: Record<SourceId, string> = {
   demo: "Demo",
@@ -123,6 +126,12 @@ export default function LogStreamPanel(): JSX.Element {
           const cliToken = getCliToken();
           let source_: RemoteLogSource;
           if (cliToken !== null) {
+            if (getCliLogCount() === 0) {
+              // CLI sin --log: /api/tail no tiene archivos. Sin polling; el
+              // panel muestra el mensaje con el comando para reiniciar.
+              setRunning(false);
+              return;
+            }
             // Backend local vía CLI: tail automático contra /api/tail.
             source_ = new RemoteLogSource((offset: number) => `/api/tail?offset=${offset}`, {
               headers: { [CLI_TOKEN_HEADER]: cliToken },
@@ -180,13 +189,22 @@ export default function LogStreamPanel(): JSX.Element {
 
   const visibleTrailId = soloTrail && selectedRequestId !== null ? selectedRequestId : null;
 
+  // Líneas probables del request seleccionado: coincidencia por tiempo.
+  const probableSet = useMemo(
+    () =>
+      selectedRequestId === null
+        ? new Set<string>()
+        : probableLineIds(buffer, requests, selectedRequestId),
+    [buffer, requests, selectedRequestId],
+  );
+
   const visible = useMemo(() => {
     const base =
       visibleTrailId !== null
-        ? buffer.filter((line) => line.requestIds.includes(visibleTrailId) || line.raw.includes(visibleTrailId))
+        ? buffer.filter((line) => isSecureLineFor(line, visibleTrailId) || probableSet.has(line.id))
         : filterLines(lines, { level, query });
     return base;
-  }, [buffer, lines, level, query, visibleTrailId]);
+  }, [buffer, lines, level, query, probableSet, visibleTrailId]);
 
   const counts = useMemo(() => countByLevel(lines), [lines]);
 
@@ -241,9 +259,8 @@ export default function LogStreamPanel(): JSX.Element {
   const trailLines =
     selectedRequestId === null
       ? []
-      : buffer.filter(
-          (line) => line.requestIds.includes(selectedRequestId) || line.raw.includes(selectedRequestId),
-        );
+      : buffer.filter((line) => isSecureLineFor(line, selectedRequestId));
+  const trailProbable = selectedRequestId === null ? 0 : probableSet.size;
   const trailErrors = trailLines.filter((l) => l.level === "error").length;
   const trailWarns = trailLines.filter((l) => l.level === "warn").length;
   const trailDuration =
@@ -259,6 +276,9 @@ export default function LogStreamPanel(): JSX.Element {
       : null);
 
   const liveCount = lines.length + pending.length;
+
+  // CLI sin --log: /api/tail no tiene archivos → mensaje con comando, no error.
+  const cliNoLogs = isCliMode() && source === "remote" && getCliLogCount() === 0;
 
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-line bg-surface p-4">
@@ -358,9 +378,19 @@ export default function LogStreamPanel(): JSX.Element {
                   {selectedRequest.url.replace(/^https?:\/\/[^/]+/, "")}
                 </span>
                 <span className="block text-[12.5px] text-ink-2">
-                  {pluralTrailLines(trailLines.length)} · {pluralTrailErrors(trailErrors)} ·{" "}
+                  {pluralSecureLines(trailLines.length)} · {pluralProbableLines(trailProbable)} ·{" "}
+                  {pluralTrailErrors(trailErrors)} ·{" "}
                   {pluralTrailWarns(trailWarns)} ·{" "}
                   {trailDuration === null ? "—" : `${Math.round(trailDuration)} ms de principio a fin`}
+                  <span
+                    tabIndex={0}
+                    role="note"
+                    aria-label="Probable = ocurrió mientras corría este request, pero tu log no incluye su ID."
+                    title="Probable = ocurrió mientras corría este request, pero tu log no incluye su ID."
+                    className="ml-2 inline-flex h-[15px] w-[15px] cursor-help items-center justify-center rounded-full border border-line-strong align-middle font-mono text-[10px] font-bold text-ink-2"
+                  >
+                    ?
+                  </span>
                 </span>
               </span>
               <button
@@ -413,9 +443,19 @@ export default function LogStreamPanel(): JSX.Element {
         </div>
       </div>
 
+      {/* Aviso: logs sin ID → coincidencias probables por tiempo */}
+      <CorrelationHint />
+
       {/* Lista */}
       <div className="relative">
-        {lines.length === 0 ? (
+        {cliNoLogs ? (
+          <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[10px] border border-line bg-bg px-3 py-6 text-center text-[12.5px]">
+            <span className="text-ink-2">No hay ningún archivo de log conectado. Reinicia con:</span>
+            <div className="w-full max-w-[440px]">
+              <CodeBlock code={"npx @estela-dev/cli --log ruta/a/tu.log"} ariaLabel="Comando para conectar un archivo de log" />
+            </div>
+          </div>
+        ) : lines.length === 0 ? (
           <div className="min-h-[160px] rounded-[10px] border border-line bg-bg px-3 py-6 text-center text-[12.5px] text-dim">
             Sin logs todavía — elige una fuente.
           </div>
@@ -434,11 +474,16 @@ export default function LogStreamPanel(): JSX.Element {
             >
               {(() => {
                 const memberships = visible.map(
-                  (line) => selectedRequestId !== null && (line.requestIds.includes(selectedRequestId) || line.raw.includes(selectedRequestId)),
+                  (line) =>
+                    selectedRequestId !== null &&
+                    (isSecureLineFor(line, selectedRequestId) || probableSet.has(line.id)),
                 );
                 const spanIdx: { first: number; last: number } | null = trailSpan(memberships);
                 return visible.map((line, i) => {
                   const isTrail = memberships[i];
+                  const isSecureTrail =
+                    isTrail && selectedRequestId !== null && isSecureLineFor(line, selectedRequestId);
+                  const isProbableTrail = isTrail && !isSecureTrail;
                   const trailColorValue =
                     isTrail && selectedRequestId !== null
                       ? trailColor(trailColors[selectedRequestId] ?? 0)
@@ -462,11 +507,16 @@ export default function LogStreamPanel(): JSX.Element {
                       style={isTrail && trailColorValue !== null ? { backgroundColor: hexToRgba(trailColorValue, 0.09) } : undefined}
                     >
                       <span className="relative block self-stretch">
+                        {/* Punto relleno (segura) o hueco (probable: anillo de 2px, sin relleno). */}
                         {isTrail && trailColorValue !== null && (
                           <span
                             aria-hidden="true"
                             className="absolute left-1/2 top-1/2 h-[10px] w-[10px] -translate-x-1/2 -translate-y-1/2 rounded-full"
-                            style={{ backgroundColor: trailColorValue, boxShadow: "0 0 0 3px #070A12" }}
+                            style={
+                              isSecureTrail
+                                ? { backgroundColor: trailColorValue, boxShadow: "0 0 0 3px #070A12" }
+                                : { border: `2px solid ${trailColorValue}`, backgroundColor: "transparent", boxShadow: "0 0 0 3px #070A12" }
+                            }
                           />
                         )}
                         {inSpan && spanColor !== null && spanIdx !== null && (
@@ -474,7 +524,11 @@ export default function LogStreamPanel(): JSX.Element {
                             aria-hidden="true"
                             className="absolute left-1/2 w-[2px] -translate-x-1/2"
                             style={{
-                              backgroundColor: hexToRgba(spanColor, TRAIL_LINE_ALPHA),
+                              ...(isProbableTrail
+                                ? {
+                                    backgroundImage: `repeating-linear-gradient(to bottom, ${hexToRgba(spanColor, TRAIL_LINE_ALPHA)} 0px, ${hexToRgba(spanColor, TRAIL_LINE_ALPHA)} 3px, transparent 3px, transparent 6px)`,
+                                  }
+                                : { backgroundColor: hexToRgba(spanColor, TRAIL_LINE_ALPHA) }),
                               top: i === spanIdx.first ? "50%" : 0,
                               bottom: i === spanIdx.last ? "50%" : 0,
                             }}

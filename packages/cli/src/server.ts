@@ -81,9 +81,10 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
   return timingSafeEqual(digestA, digestB);
 }
 
-/** Inyecta el token como variable global en el HTML servido (nunca se escribe a disco). */
-export function injectCliToken(html: string, token: string): string {
-  const script = `<script>window.__ESTELA_CLI_TOKEN__=${JSON.stringify(token)};</script>`;
+/** Inyecta el token y el número de logs conectados como variables globales en
+ *  el HTML servido (nunca se escriben a disco). */
+export function injectCliToken(html: string, token: string, logCount = 0): string {
+  const script = `<script>window.__ESTELA_CLI_TOKEN__=${JSON.stringify(token)};window.__ESTELA_CLI_LOG_COUNT__=${logCount};</script>`;
   if (html.includes("</head>")) {
     return html.replace("</head>", `${script}</head>`);
   }
@@ -533,7 +534,9 @@ export function createCliServer(options: CliServerOptions): Server {
     }
 
     const isHtml = extname(filePath) === ".html";
-    const body = isHtml ? Buffer.from(injectCliToken(content.toString("utf8"), options.token)) : content;
+    const body = isHtml
+      ? Buffer.from(injectCliToken(content.toString("utf8"), options.token, options.logFiles.length))
+      : content;
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",
       "Content-Length": body.byteLength,

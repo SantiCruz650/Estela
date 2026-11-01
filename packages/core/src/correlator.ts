@@ -25,6 +25,57 @@ export interface CorrelationResult {
   contextAfter: LogLine[];       // N líneas después del último match
 }
 
+/** Margen sobre fin del request para coincidencias por timestamp de la línea (ms). */
+export const PROBABLE_WINDOW_EXTRA_MS = 50;
+/** Margen sobre fin del request cuando la línea no tiene timestamp (hora de llegada) (ms). */
+export const PROBABLE_ARRIVAL_EXTRA_MS = 400;
+
+/**
+ * Correlación probable por tiempo: líneas que NO contienen el id exacto de
+ * ningún request conocidas, pero cuyo timestamp cae dentro de la ventana
+ * [inicio, fin + 50 ms] de EXACTAMENTE UN request.
+ * Si no hay timestamp, usa la hora de llegada con ventana [inicio, fin + 400 ms].
+ * Lo seguro siempre gana: una línea con algún id exacto nunca es probable.
+ * Si la ventana abierta (duración desconocida, request en vuelo) de dos
+ * requests contiene el tiempo, es ambiguo y no se asigna a ninguno.
+ */
+export function probableRequestForLine(
+  line: LogLine,
+  requests: ReadonlyArray<RequestRecord>,
+  arrivalMs: number,
+): string | null {
+  for (const request of requests) {
+    if (request.requestId.length > 0 && line.raw.includes(request.requestId)) {
+      return null;
+    }
+    if (line.requestIds.includes(request.requestId)) {
+      return null;
+    }
+  }
+
+  const parsedTimestamp =
+    line.timestamp !== null ? Date.parse(line.timestamp) : Number.NaN;
+  const hasOwnTimestamp = Number.isFinite(parsedTimestamp);
+
+  let probableId: string | null = null;
+  for (const request of requests) {
+    const extraMs = hasOwnTimestamp ? PROBABLE_WINDOW_EXTRA_MS : PROBABLE_ARRIVAL_EXTRA_MS;
+    const endBase =
+      request.durationMs === null
+        ? Number.POSITIVE_INFINITY
+        : request.startedAt + request.durationMs;
+    const windowEnd = endBase + extraMs;
+    const candidateMs = hasOwnTimestamp ? parsedTimestamp : arrivalMs;
+    if (candidateMs >= request.startedAt && candidateMs <= windowEnd) {
+      if (probableId !== null) {
+        return null; // En la ventana de varios requests: no se asigna a ninguno.
+      }
+      probableId = request.requestId;
+    }
+  }
+  return probableId;
+}
+
 export class Correlator {
   private readonly requests = new Map<string, RequestRecord>();
   private readonly buffer: Array<LogLine | undefined>;

@@ -42,7 +42,15 @@ export class RemoteLogSource implements LogSource {
     this.onError = opts.onError;
     this.headers = opts.headers ?? {};
     const initialUrl = makeUrl(0);
-    const host = new URL(initialUrl).host;
+    // El CLI sirve rutas relativas (/api/tail): no hay base absoluta aquí y
+    // new URL relativo lanza "Invalid URL". El fetch relativo funciona igual
+    // (same-origin) y esta marca solo identifica la fuente.
+    let host: string;
+    try {
+      host = new URL(initialUrl).host;
+    } catch {
+      host = "same-origin";
+    }
     this.id = `remote:${host}`;
     this.name = `remote:${host}`;
   }

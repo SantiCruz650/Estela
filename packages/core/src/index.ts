@@ -5,7 +5,7 @@ export { extractCompleteLines, FileSystemLogSource, PermissionRequiredError } fr
 export type { BlobLike, FileHandleLike, FileLike, PermissionStateLike } from "./fs-log-source.js";
 export { RemoteLogSource } from "./remote-log-source.js";
 export type { TailResponse } from "./remote-log-source.js";
-export { Correlator } from "./correlator.js";
+export { Correlator, probableRequestForLine, PROBABLE_WINDOW_EXTRA_MS, PROBABLE_ARRIVAL_EXTRA_MS } from "./correlator.js";
 export type { CorrelationResult, RequestRecord } from "./correlator.js";
 export { executeRequest, MAX_BODY_CHARS, DEFAULT_REQUEST_TIMEOUT_MS } from "./http-client.js";
 export type {

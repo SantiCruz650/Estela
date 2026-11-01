@@ -1,6 +1,6 @@
 {
   "name": "@estela-dev/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Estela en local: sirve la app y puentea tu backend sin CORS (solo 127.0.0.1).",
   "keywords": [
     "api-client",
@@ -10,10 +10,14 @@
     "localhost"
   ],
   "license": "AGPL-3.0-only",
+  "homepage": "https://github.com/SantiCruz650/Estela#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/SantiCruz650/devtool.git",
+    "url": "git+https://github.com/SantiCruz650/Estela.git",
     "directory": "packages/cli"
+  },
+  "bugs": {
+    "url": "https://github.com/SantiCruz650/Estela/issues"
   },
   "type": "module",
   "bin": {

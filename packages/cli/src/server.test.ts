@@ -226,12 +226,27 @@ describe("createCliServer", () => {
       expect(jsonResponse(result).error).toBe("invalid_token");
     });
 
-    it("inyecta el token en el HTML servido", async () => {
-      const port = await startServer();
-      const result = await rawRequest(port, { path: "/" });
-      expect(result.status).toBe(200);
-      expect(result.body).toContain(`window.__ESTELA_CLI_TOKEN__="${TOKEN}"`);
-    });
+  it("inyecta el token en el HTML servido", async () => {
+    const port = await startServer();
+    const result = await rawRequest(port, { path: "/" });
+    expect(result.status).toBe(200);
+    expect(result.body).toContain(`window.__ESTELA_CLI_TOKEN__="${TOKEN}"`);
+  });
+
+  it("inyecta también el número de logs configurados junto al token", async () => {
+    const port = await startServer();
+    const result = await rawRequest(port, { path: "/" });
+    expect(result.status).toBe(200);
+    expect(result.body).toContain("window.__ESTELA_CLI_LOG_COUNT__=1");
+  });
+
+  it("con cero logs (--log ausente) inyecta __ESTELA_CLI_LOG_COUNT__=0", async () => {
+    const port = await startServer({ logFiles: [] });
+    const result = await rawRequest(port, { path: "/" });
+    expect(result.status).toBe(200);
+    expect(result.body).toContain("window.__ESTELA_CLI_LOG_COUNT__=0");
+    expect(result.body).not.toContain("__ESTELA_CLI_LOG_COUNT__=1");
+  });
   });
 
   describe("OPTIONS", () => {

@@ -27,13 +27,19 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
     abortRef.current?.abort();
   }
 
-  async function recordAndSave(inputValue: HttpRequestInput, res: HttpResponseInfo): Promise<void> {
+  async function recordAndSave(
+    inputValue: HttpRequestInput,
+    res: HttpResponseInfo,
+    startedAtMs: number,
+  ): Promise<void> {
     useCorrelationStore.getState().recordRequest({
       requestId: res.requestId,
       method: inputValue.method,
       url: inputValue.url,
       statusCode: res.status,
-      startedAt: Date.now(),
+      // Hora de INICIO real de la request (necesaria para la ventana de
+      // correlación probable): no la hora de grabado al terminar.
+      startedAt: startedAtMs,
       durationMs: res.durationMs,
     });
     try {
@@ -45,6 +51,7 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
 
   async function handleSend(inputValue: HttpRequestInput): Promise<void> {
     setSending(true);
+    const requestStart = Date.now();
     const controller = new AbortController();
     abortRef.current = controller;
     try {
@@ -56,7 +63,7 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
             return;
           }
           useResponseStore.getState().setResponse(res, inputValue);
-          await recordAndSave(inputValue, res);
+          await recordAndSave(inputValue, res, requestStart);
         } catch (error) {
           if (controller.signal.aborted) {
             return;
@@ -94,7 +101,7 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
             return;
           }
           useResponseStore.getState().setResponse(res, inputValue);
-          await recordAndSave(inputValue, res);
+          await recordAndSave(inputValue, res, requestStart);
           return;
         } catch (error) {
           console.warn("Extensión falló, usando fetch directo:", error);
@@ -106,7 +113,7 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
         return;
       }
       useResponseStore.getState().setResponse(result, inputValue);
-      await recordAndSave(inputValue, result);
+      await recordAndSave(inputValue, result, requestStart);
     } finally {
       if (abortRef.current === controller) {
         abortRef.current = null;

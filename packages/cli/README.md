@@ -47,7 +47,8 @@ Node.js >= 20. Sin dependencias: solo builtins de Node.
 
 ## Enlaces
 
-- Repo: https://github.com/SantiCruz650/devtool
+- Repo: https://github.com/SantiCruz650/Estela
+- Issues: https://github.com/SantiCruz650/Estela/issues
 - App en producción: https://esteladev.netlify.app
 
 ## Licencia

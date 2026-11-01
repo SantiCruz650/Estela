@@ -29,6 +29,8 @@ Solo Chromium (Chrome, Edge, Brave, Arc). Firefox aún no (File System Access AP
 
 Tres caminos, según tu caso. Todos mantienen la correlación petición↔logs.
 
+> En la app (panel de logs), el botón **Ver cómo** abre el modal "Conecta tu backend": fragmentos listos para Node (http), Express, Fastify, Next.js, NestJS, Flask, FastAPI y Django. Cada fragmento lee el header `X-Request-ID` (o genera uno si falta), lo devuelve en la respuesta y hace que las líneas de log de ese request incluyan `req=<id>`. Estela reconoce el ID en cualquier formato y en cualquier parte de la línea.
+
 ### 1. CLI local (recomendado para empezar)
 
 Publicado en npm como `@estela-dev/cli` (el nombre simple `estela` ya estaba ocupado):

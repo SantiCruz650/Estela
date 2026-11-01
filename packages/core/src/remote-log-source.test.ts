@@ -20,6 +20,24 @@ describe("RemoteLogSource", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  it("no lanza 'Invalid URL' con la ruta relativa del CLI (/api/tail)", async () => {
+    // Reproduce el bug 0.1.0: el constructor hacía new URL("/api/tail?offset=0") sin base.
+    const urls: string[] = [];
+    const fetchImpl = fakeFetchQueue([{ size: 10, truncated: false, data: "INFO cli\n" }], urls);
+    const make = (): RemoteLogSource =>
+      new RemoteLogSource((offset) => `/api/tail?offset=${offset}`, { fetchImpl, readFrom: "start" });
+    expect(() => make()).not.toThrow();
+    const source = make();
+    const received: string[] = [];
+    source.subscribe((lines) => received.push(...lines.map((line) => line.raw)));
+    await source.start();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(received).toEqual(["INFO cli"]);
+    expect(urls).toEqual(["/api/tail?offset=0"]);
+    expect(source.id).not.toContain("://");
+    await source.stop();
+  });
+
   it("does not emit preexisting data on the first end tick", async () => {
     const urls: string[] = [];
     const fetchImpl = fakeFetchQueue([{ size: 12, truncated: false, data: "INFO old\n" }], urls);

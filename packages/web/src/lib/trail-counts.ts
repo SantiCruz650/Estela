@@ -1,7 +1,11 @@
 /* Plurales en español para la barra del rastro (puros, testables). */
 
-export function pluralTrailLines(n: number): string {
-  return n === 1 ? "1 línea" : `${n} líneas`;
+export function pluralSecureLines(n: number): string {
+  return n === 1 ? "1 línea segura" : `${n} líneas seguras`;
+}
+
+export function pluralProbableLines(n: number): string {
+  return n === 1 ? "1 probable" : `${n} probables`;
 }
 
 export function pluralTrailErrors(n: number): string {

@@ -31,13 +31,14 @@ const defaultHooks: DemoRunHooks = {
 /** Ejecuta un request por el responder demo, registra en store + historial
  *  y emite su rastro por el bus. Devuelve la respuesta. */
 export async function dispatchDemoRequest(input: HttpRequestInput): Promise<HttpResponseInfo> {
+  const startedAt = Date.now();
   const res = await respondDemo(input);
   useCorrelationStore.getState().recordRequest({
     requestId: input.requestId,
     method: input.method,
     url: input.url,
     statusCode: res.status,
-    startedAt: Date.now(),
+    startedAt,
     durationMs: res.durationMs,
   });
   demoTrailBus.emit({
