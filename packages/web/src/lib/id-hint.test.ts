@@ -39,6 +39,12 @@ describe("shouldShowIdHint (aviso para conectar el backend)", () => {
     expect(shouldShowIdHint("remote", [request(reqA), request(reqB)], [...plainLines(), secure])).toBe(false);
   });
 
+  it("no aplica con 0 líneas recibidas (el log todavía no trajo nada)", () => {
+    // Bug 0.1.1: con el poll sin datos el buffer está vacío y el aviso salía igual.
+    expect(shouldShowIdHint("remote", [request(reqA), request(reqB)], [])).toBe(false);
+    expect(shouldShowIdHint("file", [request(reqA), request(reqB)], [])).toBe(false);
+  });
+
   it("sí aplica si las líneas existen pero pertenecen a otro request ajeno", () => {
     const other = parseLine("[2026-01-01T00:00:01.050Z] INFO id=req-desconocido listo", "app.log");
     expect(shouldShowIdHint("remote", [request(reqA), request(reqB)], [...plainLines(), other])).toBe(true);

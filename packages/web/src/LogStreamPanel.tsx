@@ -57,6 +57,10 @@ export default function LogStreamPanel(): JSX.Element {
   const trailColors = useCorrelationStore((state) => state.trailColors);
 
   const [permissionError, setPermissionError] = useState<string | null>(null);
+  /** Error del polling remoto (tail): visible en el panel hasta que se recupere. */
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  /** true solo tras al MENOS un poll exitoso: "En vivo" exige polling real. */
+  const [pollHealthy, setPollHealthy] = useState(false);
   const [remoteBase, setRemoteBase] = useState<string>(() => {
     try {
       return localStorage.getItem("estela.remoteBase") ?? "http://localhost:3000";
@@ -97,6 +101,8 @@ export default function LogStreamPanel(): JSX.Element {
       clearLines();
       setRunning(false);
       setPermissionError(null);
+      setSourceError(null);
+      setPollHealthy(false);
       setLocalRunning(false);
 
       const append = (newLines: LogLine[]): void => {
@@ -106,6 +112,19 @@ export default function LogStreamPanel(): JSX.Element {
           useCorrelationStore.getState().ingest(newLines);
         }
       };
+      /** Señales del polling: "En vivo" solo cuando un poll dejó la cola completa con éxito. */
+      const pollScripts = {
+        onError: (): void => {
+          setPollHealthy(false);
+          setSourceError(
+            "No se pudo leer el log del backend local (el tail falló). Se reintenta automáticamente.",
+          );
+        },
+        onPollSuccess: (): void => {
+          setPollHealthy(true);
+          setSourceError(null);
+        },
+      } satisfies Pick<ConstructorParameters<typeof RemoteLogSource>[1] & object, "onError" | "onPollSuccess">;
 
       try {
         if (nextSource === "demo") {
@@ -120,6 +139,7 @@ export default function LogStreamPanel(): JSX.Element {
           };
           setLocalRunning(true);
           setRunning(true);
+          setPollHealthy(true);
           return;
         }
         if (nextSource === "remote") {
@@ -135,13 +155,18 @@ export default function LogStreamPanel(): JSX.Element {
             // Backend local vía CLI: tail automático contra /api/tail.
             source_ = new RemoteLogSource((offset: number) => `/api/tail?offset=${offset}`, {
               headers: { [CLI_TOKEN_HEADER]: cliToken },
+              onError: pollScripts.onError,
+              onPollSuccess: pollScripts.onPollSuccess,
             });
           } else {
             const base = remoteBase.trim().replace(/\/+$/, "");
             if (base === "") {
               throw new Error("Indica la URL de tu backend local (http://localhost:…).");
             }
-            source_ = new RemoteLogSource((offset: number) => `${base}/logs/tail?offset=${offset}`);
+            source_ = new RemoteLogSource((offset: number) => `${base}/logs/tail?offset=${offset}`, {
+              onError: pollScripts.onError,
+              onPollSuccess: pollScripts.onPollSuccess,
+            });
           }
           await source_.start();
           const unsubscribe = source_.subscribe(append);
@@ -164,6 +189,7 @@ export default function LogStreamPanel(): JSX.Element {
         };
         setLocalRunning(true);
         setRunning(true);
+        setPollHealthy(true);
       } catch (error) {
         if (error instanceof PermissionRequiredError) {
           setPermissionError("Permiso denegado, reintenta");
@@ -288,9 +314,23 @@ export default function LogStreamPanel(): JSX.Element {
         <span className="flex items-center gap-2 text-[12.5px] text-ink-2">
           <span
             aria-hidden="true"
-            className={`h-2 w-2 rounded-full ${running && !paused ? "bg-ok animate-live-pulse" : "bg-dim"}`}
+            className={`h-2 w-2 rounded-full ${
+              sourceError !== null
+                ? "bg-err"
+                : running && !paused && pollHealthy
+                  ? "bg-ok animate-live-pulse"
+                  : "bg-dim"
+            }`}
           />
-          {running ? (paused ? "En pausa" : `En vivo · ${liveCount} líneas`) : "Detenido"}
+          {sourceError !== null
+            ? "Error de conexión"
+            : running
+              ? paused
+                ? "En pausa"
+                : pollHealthy
+                  ? `En vivo · ${liveCount} líneas`
+                  : "Conectando…"
+              : "Detenido"}
         </span>
         <span className="ml-auto flex items-center gap-2">
           <div className="flex items-center gap-0.5 rounded-[10px] border border-line bg-bg p-[3px]" role="group" aria-label="Fuente de logs">
@@ -348,9 +388,9 @@ export default function LogStreamPanel(): JSX.Element {
         </div>
       )}
 
-      {permissionError !== null && (
+      {(permissionError ?? sourceError) !== null && (
         <div className="rounded-[10px] border border-err/50 bg-[rgba(251,113,133,0.10)] px-3 py-2 text-[12.5px] text-err">
-          {permissionError}
+          {permissionError ?? sourceError}
         </div>
       )}
 

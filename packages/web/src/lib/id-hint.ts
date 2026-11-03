@@ -20,6 +20,11 @@ export function shouldShowIdHint(
   if (requests.length < 2) {
     return false;
   }
+  // Con 0 líneas recibidas no hay nada que analizar: el poll aún no trajo nada
+  // (o falló). Avisar entonces sería mentirle al usuario.
+  if (buffer.length === 0) {
+    return false;
+  }
   const ids = new Set(requests.map((request) => request.requestId));
   for (const id of ids) {
     for (const line of buffer) {

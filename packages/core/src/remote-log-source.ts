@@ -17,6 +17,9 @@ export class RemoteLogSource implements LogSource {
   private readonly fetchImpl: typeof fetch;
   private readonly readFrom: "start" | "end";
   private readonly onError: ((err: unknown) => void) | undefined;
+  /** Cada poll que termina bien (datos o no) avisa a la UI: el indicador
+   *  "En vivo" solo debe encenderse con polling real funcionando. */
+  private readonly onPollSuccess: (() => void) | undefined;
   private readonly headers: Record<string, string>;
   private readonly subscribers = new Set<(lines: LogLine[]) => void>();
   private intervalId: ReturnType<typeof setInterval> | undefined;
@@ -31,6 +34,7 @@ export class RemoteLogSource implements LogSource {
       fetchImpl?: typeof fetch;
       readFrom?: "start" | "end";
       onError?: (err: unknown) => void;
+      onPollSuccess?: () => void;
       /** Headers extra en cada poll (p. ej. token del CLI local). */
       headers?: Record<string, string>;
     } = {},
@@ -40,6 +44,7 @@ export class RemoteLogSource implements LogSource {
     this.fetchImpl = opts.fetchImpl ?? fetch;
     this.readFrom = opts.readFrom ?? "end";
     this.onError = opts.onError;
+    this.onPollSuccess = opts.onPollSuccess;
     this.headers = opts.headers ?? {};
     const initialUrl = makeUrl(0);
     // El CLI sirve rutas relativas (/api/tail): no hay base absoluta aquí y
@@ -90,7 +95,12 @@ export class RemoteLogSource implements LogSource {
     }
 
     try {
-      const response = await this.fetchImpl(this.makeUrl(this.offset ?? 0), {
+      // INVOCACIÓN SIN RECEPTOR: window.fetch nativo exige `this` == el window.
+      // Llamar this.fetchImpl(url) pone `this` = instancia y en el navegador
+      // real lanza "Illegal invocation" (silenciado por este catch), dejando
+      // el "polling" muerto: sin request en red y offset atascado en 0 (bug 0.1.1).
+      const fetcher = this.fetchImpl;
+      const response = await fetcher(this.makeUrl(this.offset ?? 0), {
         headers: this.headers,
       });
       if (this.stopped) {
@@ -106,6 +116,7 @@ export class RemoteLogSource implements LogSource {
 
       if (this.offset === null && this.readFrom === "end") {
         this.offset = payload.size;
+        this.onPollSuccess?.();
         return;
       }
 
@@ -120,6 +131,7 @@ export class RemoteLogSource implements LogSource {
         this.emit(extracted.lines.map((line) => parseLine(line, this.name)));
       }
       this.offset = payload.size;
+      this.onPollSuccess?.();
     } catch (error) {
       if (!this.stopped) {
         this.onError?.(error);

@@ -223,4 +223,64 @@ describe("RemoteLogSource", () => {
     expect(seenHeaders[0]).toEqual({ "X-Estela-Token": "abc123" });
     await source.stop();
   });
+
+  it("invoca fetchImpl sin receptor (imita fetch nativo que exige this == window)", async () => {
+    // Reproduce el bug 0.1.1: llamar this.fetchImpl(url) hace que `this` sea la
+    // instancia y el fetch nativo del navegador lanza "Illegal invocation",
+    // silenciado por el catch: nunca hay request real en la red.
+    const nativeLike = function (this: unknown, input: RequestInfo | URL): Promise<Response> {
+      if (this !== undefined) {
+        return Promise.reject(new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation"));
+      }
+      void input;
+      return Promise.resolve({
+        json: async () => ({ size: 10, truncated: false, data: "INFO nativo\n" }),
+      } as Response);
+    } as unknown as typeof fetch;
+    const source = new RemoteLogSource(() => "https://api.test/logs", { fetchImpl: nativeLike, readFrom: "start" });
+    const received: string[] = [];
+    source.subscribe((lines) => received.push(...lines.map((line) => line.raw)));
+    await source.start();
+    await vi.advanceTimersByTimeAsync(300);
+    expect(received).toEqual(["INFO nativo"]);
+    await source.stop();
+  });
+
+  it("avisa del primer poll exitoso y de cada falla vía callbacks", async () => {
+    const successes: number[] = [];
+    const errors: unknown[] = [];
+    const fetchImpl = fakeFetchQueue([
+      new Error("offline"),
+      { size: 10, truncated: false, data: "INFO ok\n" },
+    ], []);
+    const source = new RemoteLogSource(() => "https://api.test/logs", {
+      fetchImpl,
+      readFrom: "start",
+      onError: (error) => errors.push(error),
+      onPollSuccess: () => successes.push(1),
+    });
+    const received: string[] = [];
+    source.subscribe((lines) => received.push(...lines.map((line) => line.raw)));
+    await source.start();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(errors).toHaveLength(1);
+    expect(successes).toHaveLength(1);
+    expect(received).toEqual(["INFO ok"]);
+    await source.stop();
+  });
+
+  it("ignora el onPollSuccess de una respuesta que ya no vive tras stop", async () => {
+    const successes: number[] = [];
+    const source = new RemoteLogSource(() => "https://api.test/logs", {
+      fetchImpl: fakeFetchQueue([{ size: 10, truncated: false, data: "INFO one\n" }], []),
+      readFrom: "start",
+      onPollSuccess: () => successes.push(1),
+    });
+    source.subscribe(() => {});
+    await source.start();
+    await vi.advanceTimersByTimeAsync(300);
+    await source.stop();
+    await vi.advanceTimersByTimeAsync(600);
+    expect(successes).toHaveLength(1);
+  });
 });
