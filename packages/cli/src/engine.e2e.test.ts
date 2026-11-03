@@ -15,12 +15,14 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, appendFileSync, readdirSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, appendFileSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import * as wsModule from "ws";
+import * as http from "node:http";
+import type { AddressInfo } from "node:net";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const cliRoot = join(here, "..");
@@ -358,5 +360,160 @@ describe("estela e2e (Chrome headless)", {
       `fetch("/api/tail?offset=0", { headers: { "X-Estela-Token": window.__ESTELA_CLI_TOKEN__ } }).then((r) => r.text())`,
     ));
     expect(tailText).toContain(reqId);
+  });
+
+  it("al enviar desde la app: auto-selección, rastro (rellenos + hueco) y mensaje limpio", { timeout: 90_000 }, async () => {
+    const errorsBefore = pageErrors.length;
+    // Backend REAL mínimo (estilo Next.js): logea 2 líneas seguras (req=<id>
+    // al entrar y al salir) + 1 línea de framework sin id, responde tras ~200 ms.
+    const backend = http.createServer((req, res) => {
+      res.setHeader("access-control-allow-origin", "*");
+      res.setHeader("access-control-allow-headers", "content-type,x-request-id");
+      res.setHeader("access-control-allow-methods", "GET,POST,OPTIONS");
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+      let body = "";
+      req.on("data", (c) => (body += c));
+      req.on("end", () => {
+        const id = String(req.headers["x-request-id"] ?? "sin-id");
+        const timestamp = new Date().toISOString();
+        appendFileSync(logFile, `${timestamp} INFO req=${id} → GET /api/me\n`, "utf8");
+        // Línea de framework SIN id y SIN token de nivel de Estela: nivel
+        // desconocido → badge "—", y es probable por timestamp dentro de la ventana.
+        appendFileSync(logFile, `${timestamp} GET /api/me 200 in 33ms (route.ts interno, sin id)\n`, "utf8");
+        setTimeout(() => {
+          appendFileSync(logFile, `${new Date().toISOString()} INFO req=${id} ← 200 GET /api/me 33ms\n`, "utf8");
+          res.writeHead(200, { "content-type": "application/json", "x-request-id": id });
+          res.end(JSON.stringify({ ok: true, requestId: id }));
+        }, 200);
+      });
+    });
+    await new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve));
+    const backendPort = (backend.address() as AddressInfo).port;
+    try {
+      // Enviar desde la UI real: URL mock + botón Enviar.
+      const fill = String(
+        await page!.evalJs(`(() => {
+          const input = document.querySelector("#req-url");
+          if (input === null) return "no-url-input";
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+          setter.call(input, ${JSON.stringify(`http://127.0.0.1:${backendPort}/api/me`)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return "ok";
+        })()`),
+      );
+      expect(fill).toBe("ok");
+      const sendClicked = String(
+        await page!.evalJs(
+          '(() => { const b=[...document.querySelectorAll("button")].find((e)=>e.textContent?.trim()==="Enviar"); if (b===undefined) return "no"; b.click(); return "ok"; })()',
+        ),
+      );
+      expect(sendClicked).toBe("ok");
+
+      // A) AUTO-SELECCIÓN: el rastro aparece SIN que el usuario toque el historial.
+      let selected = "";
+      let trailBar = "";
+      for (let i = 0; i < 40; i++) {
+        await sleep(250);
+        const state = JSON.parse(
+          String(await page!.evalJs(`JSON.stringify({
+            historyPressed: [...document.querySelectorAll("li button[aria-pressed='true']")].length,
+            trail: (document.body.innerText.match(/Rastro de[^\\n]*/g) ?? [])[0] ?? "",
+          })`)),
+        ) as { historyPressed: number; trail: string };
+        selected = String(state.historyPressed);
+        trailBar = state.trail;
+        if (state.historyPressed > 0 && state.trail.includes("Rastro de")) break;
+      }
+      if (selected === "0") {
+        const diagnosis = String(
+          await page!.evalJs(`JSON.stringify({
+            liveLabel: ([...document.querySelectorAll("span")].map((e) => e.textContent ?? "").find((t) => /En vivo|Conectando|Detenido|Error de/.test(t)) ?? "?"),
+            logRows: document.querySelectorAll('[role="log"] > div').length,
+            bodyTail: document.body.innerText.slice(-400),
+          })`),
+        );
+        console.warn("DIAGNOSTICO sin auto-selección:", diagnosis, "| log actual:", readFileSync(logFile, "utf8"));
+      }
+      expect(
+        selected,
+        `sin auto-selección: ${selected} item(s) activos; errors=${JSON.stringify(pageErrors.slice(0, 3))}`,
+      ).not.toBe("0");
+      expect(trailBar).toContain("Rastro de GET /api/me");
+
+      // B) Espera a que las 3 líneas del backend lleguen por el tail y encontrar filas.
+      let rowsFound = false;
+      for (let i = 0; i < 40 && !rowsFound; i++) {
+        await sleep(250);
+        rowsFound =
+          String(
+            await page!.evalJs(
+              '(() => { const t=[...document.querySelectorAll(\'[role="log"] > div\')].map((r)=>r.textContent??"").join("\\n"); return t.includes("← 200 GET /api/me 33ms") && t.includes("route.ts interno"); })()',
+            ),
+          ) === "true";
+      }
+      expect(rowsFound, "las 3 líneas no aparecieron en el panel").toBe(true);
+      // Filas del panel: mensaje limpio, badge sin "UNKNOWN" y puntos correctos.
+      const rows = JSON.parse(
+        String(await page!.evalJs(`JSON.stringify((() => {
+          const rows = [...document.querySelectorAll('[role="log"] > div')];
+          return rows.map((r) => {
+            const cell = r.children[0];
+            const dot = cell !== undefined ? cell.querySelector("span[style]") : null;
+            const cells = [...r.children].map((c) => c.textContent?.trim() ?? "");
+            return {
+              badge: cells[2] ?? "",
+              text: cells[3] ?? "",
+              id: cells[4] ?? "",
+              dot: dot === null ? "" : (dot.getAttribute("style") ?? ""),
+              rowBg: (r.getAttribute("style") ?? "").includes("background-color") ? "colored" : "plain",
+            };
+          });
+        })())`)),
+      ) as Array<{ badge: string; text: string; id: string; dot: string; rowBg: string }>;
+      const withText = (needle: string) => rows.filter((r) => r.text.includes(needle));
+
+      // Mensaje LIMPIO: sin ISO, sin nivel, sin req=<id> (en cualquier posición).
+      const entry = withText("→ GET /api/me");
+      const exit = withText("← 200 GET /api/me 33ms");
+      const framework = withText("route.ts interno");
+      expect(entry).toHaveLength(1);
+      expect(exit).toHaveLength(1);
+      expect(framework).toHaveLength(1);
+      expect(entry[0].text).toBe("→ GET /api/me");
+      expect(entry[0].text).not.toContain("req=");
+      expect(entry[0].text).not.toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      expect(entry[0].id).not.toBe("");
+
+      // C) Badge de nivel: INFO normal, desconocido = "—" (nunca "UNKNOWN").
+      expect(entry[0].badge).toContain("INFO");
+      expect(framework[0].badge).toBe("—");
+      const unknownCount = Number(
+        await page!.evalJs(
+          '[...document.querySelectorAll("span")].filter((s) => s.textContent === "UNKNOWN").length',
+        ),
+      );
+      expect(unknownCount).toBe(0);
+
+      // D) Puntos del rastro: relleno en las seguras, hueco en la probable.
+      const isFilled = (dot: string) =>
+        dot.includes("background-color") && !dot.includes("transparent");
+      const isHollow = (dot: string) => dot.includes("border: 2px") && dot.includes("transparent");
+      expect(isFilled(entry[0].dot), `entry dot: ${entry[0].dot}`).toBe(true);
+      expect(isFilled(exit[0].dot), `exit dot: ${exit[0].dot}`).toBe(true);
+      expect(isHollow(framework[0].dot), `framework dot: ${framework[0].dot}`).toBe(true);
+      // Y la fila entera toma el color del rastro.
+      expect(entry[0].rowBg).toBe("colored");
+      expect(framework[0].rowBg).toBe("colored");
+
+      expect(pageErrors.length, JSON.stringify(pageErrors.slice(errorsBefore, 3))).toBe(errorsBefore);
+    } finally {
+      backend.closeAllConnections?.();
+      await new Promise<void>((resolve) => backend.close(() => resolve()));
+    }
   });
 });

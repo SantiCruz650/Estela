@@ -50,12 +50,51 @@ describe("cleanLogMessage", () => {
   it("no toca mensajes con req= sin id UUID válido en el sufijo exacto al final", () => {
     // El id de la columna termina en otra cosa: el texto se queda igual.
     expect(cleanLogMessage("resumen req=11111111-2222-4abc-8abc-123456789abc fin", "info", "11111111-2222-4abc-8abc-123456789abc")).toBe(
-      "resumen req=11111111-2222-4abc-8abc-123456789abc fin",
+      "resumen fin",
     );
   });
 
   it("funciona sin timestamp ni nivel que limpiar", () => {
     expect(cleanLogMessage("healthcheck OK", "debug", undefined)).toBe("healthcheck OK");
     expect(cleanLogMessage("[2026-10-26T10:00:00.123Z] healthcheck OK", "debug", undefined)).toBe("healthcheck OK");
+  });
+
+  it("quita el ISO sin corchetes al inicio (formato Next.js/uvicorn sin [ts])", () => {
+    // Formato real del backend del usuario: ISO a secas, sin corchetes.
+    const id = "6ed5bedd-bde7-4bc9-b05a-0d7032b67c99";
+    const message = cleanLogMessage(
+      "2026-11-03T17:28:42.414Z INFO req=6ed5bedd-bde7-4bc9-b05a-0d7032b67c99 → GET /api/me",
+      "info",
+      id,
+    );
+    expect(message).toBe("→ GET /api/me");
+  });
+
+  it("quita el nivel cuando va después del timestamp sin corchetes", () => {
+    const id = "6ed5bedd-bde7-4bc9-b05a-0d7032b67c99";
+    expect(cleanLogMessage(
+      "2026-11-03T17:28:42.414Z INFO req=6ed5bedd-bde7-4bc9-b05a-0d7032b67c99 ← 200 GET /api/me 33ms",
+      "info",
+      id,
+    )).toBe("← 200 GET /api/me 33ms");
+    expect(cleanLogMessage(
+      "2026-11-03T17:28:42.414Z DEBUG req=6ed5bedd-bde7-4bc9-b05a-0d7032b67c99 cache hit",
+      "debug",
+      id,
+    )).toBe("cache hit");
+  });
+
+  it("quita req=<id> / requestId=<id> en CUALQUIER posición cuando es el id de la columna", () => {
+    const id = "6ed5bedd-bde7-4bc9-b05a-0d7032b67c99";
+    expect(cleanLogMessage(`req=${id} INFO → GET /api/me`, "info", id)).toBe("→ GET /api/me");
+    expect(cleanLogMessage(`INFO req=${id} → GET /api/me`, "info", id)).toBe("→ GET /api/me");
+    expect(cleanLogMessage(`INFO → GET /api/me req=${id}`, "info", id)).toBe("→ GET /api/me");
+    expect(cleanLogMessage(`INFO requestId=${id} → GET /api/me`, "info", id)).toBe("→ GET /api/me");
+  });
+
+  it("conserva el texto íntegro cuando el id de la columna es undefined (línea probable)", () => {
+    expect(cleanLogMessage("req=algún-otro-id INFO opciones", "info", undefined)).toBe(
+      "req=algún-otro-id INFO opciones",
+    );
   });
 });

@@ -36,7 +36,7 @@ const LEVEL_BADGES: Record<string, string> = {
   error: "text-err bg-[rgba(251,113,133,0.15)]",
 };
 
-const UNKNOWN_BADGE = "text-debug bg-[rgba(148,163,184,0.10)]";
+const UNKNOWN_BADGE = "text-dim bg-transparent";
 
 export default function LogStreamPanel(): JSX.Element {
   const lines = useLogLineStore((state) => state.lines);
@@ -581,7 +581,7 @@ export default function LogStreamPanel(): JSX.Element {
                       <span
                         className={`justify-center rounded-[5px] px-1.5 py-0.5 text-center text-[11px] font-semibold ${LEVEL_BADGES[line.level] ?? UNKNOWN_BADGE}`}
                       >
-                        {line.level.toUpperCase()}
+                        {line.level === "unknown" ? "—" : line.level.toUpperCase()}
                       </span>
                       <span
                         className={`min-w-0 text-[12.5px] leading-[1.7] ${isTrail ? "text-[#F1F4F9]" : "text-code"}`}

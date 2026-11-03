@@ -117,4 +117,11 @@ describe("RequestForm — atajo Ctrl/Cmd + Enter", () => {
     expect(sendButton.getAttribute("title")).toBe("Ctrl + Enter");
     expect(sendButton.getAttribute("aria-keyshortcuts")).toBe("Control+Enter");
   });
+
+  it("la fila X-Request-ID dice 'envío' con tilde (no sin tilde)", () => {
+    renderForm();
+    expect(container.textContent).toContain("uno nuevo en cada envío");
+    // "envio" (sin tilde) no es substring de "envío": si apareciera el typo, falla.
+    expect(container.textContent).not.toContain("envio");
+  });
 });

@@ -42,6 +42,9 @@ export default function RequestRunner({ extStatus }: RequestRunnerProps): JSX.El
       startedAt: startedAtMs,
       durationMs: res.durationMs,
     });
+    // Auto-selección: tras enviar, el rastro (barra + puntos + color) aparece
+    // en el panel sin que el usuario tenga que buscar el request en el historial.
+    useCorrelationStore.getState().selectRequest(res.requestId);
     try {
       await saveHistory(toHistoryEntry(inputValue, res));
     } catch (error) {
