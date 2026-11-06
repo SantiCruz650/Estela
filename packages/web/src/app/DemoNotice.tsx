@@ -3,7 +3,7 @@ import { copyText } from "../lib/clipboard";
 import { isCliMode } from "../config";
 
 const DISMISSED_KEY = "estela.demoBannerDismissed";
-const CLI_COMMAND = "npx @estela-dev/cli";
+const CLI_COMMAND = "npx @estela-dev/cli -- npm run dev";
 
 function wasDismissed(): boolean {
   try {

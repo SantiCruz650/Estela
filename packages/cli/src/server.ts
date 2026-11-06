@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { open, readFile, stat } from "node:fs/promises";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
+import type { ProcessLogBuffer } from "@devtool/core";
 
 /** Header único de autenticación. Nunca por query string ni cookie. */
 export const CLI_TOKEN_HEADER = "x-estela-token";
@@ -43,6 +44,14 @@ export interface TailResponse {
   data: string;
 }
 
+/** Modo proceso (Estela arranca tu backend con `-- <comando>`). */
+export interface ProcessModeHandle {
+  /** Comando del usuario, tal cual lo escribió ("npm run dev"). */
+  readonly command: string;
+  /** Salida del hijo decodificada (hora exacta del CLI por línea). */
+  readonly buffer: ProcessLogBuffer;
+}
+
 export interface CliServerOptions {
   /** Puerto TCP lógico para las validaciones Host/Origin. 0 = efímero (tests). */
   port: number;
@@ -50,6 +59,8 @@ export interface CliServerOptions {
   distDir: string;
   /** Rutas absolutas de los únicos archivos que /api/tail puede leer. */
   logFiles: readonly string[];
+  /** Modo proceso activo (`estela -- <comando>`), null en modo archivo. */
+  processLog?: ProcessModeHandle;
   /** Token aleatorio exigido en cada /api/*. */
   token: string;
   requestTimeoutMs?: number;
@@ -81,10 +92,15 @@ export function timingSafeStringEqual(a: string, b: string): boolean {
   return timingSafeEqual(digestA, digestB);
 }
 
-/** Inyecta el token y el número de logs conectados como variables globales en
- *  el HTML servido (nunca se escriben a disco). */
-export function injectCliToken(html: string, token: string, logCount = 0): string {
-  const script = `<script>window.__ESTELA_CLI_TOKEN__=${JSON.stringify(token)};window.__ESTELA_CLI_LOG_COUNT__=${logCount};</script>`;
+/** Inyecta el token, el número de logs conectados y el comando de proceso
+ *  como variables globales en el HTML servido (nunca se escriben a disco). */
+export function injectCliToken(
+  html: string,
+  token: string,
+  logCount = 0,
+  processCommand: string | null = null,
+): string {
+  const script = `<script>window.__ESTELA_CLI_TOKEN__=${JSON.stringify(token)};window.__ESTELA_CLI_LOG_COUNT__=${logCount};window.__ESTELA_CLI_PROCESS__=${JSON.stringify(processCommand)};</script>`;
   if (html.includes("</head>")) {
     return html.replace("</head>", `${script}</head>`);
   }
@@ -313,6 +329,15 @@ export function createCliServer(options: CliServerOptions): Server {
         return;
       }
 
+      if (path === "/api/process") {
+        if (method !== "GET") {
+          sendJson(res, 405, { error: "method_not_allowed" });
+          return;
+        }
+        handleProcessLog(url, res);
+        return;
+      }
+
       sendJson(res, 404, { error: "not_found" });
       return;
     }
@@ -502,6 +527,22 @@ export function createCliServer(options: CliServerOptions): Server {
     sendJson(res, 200, payload);
   }
 
+  /** Salida del proceso hijo (modo `estela -- <comando>`) por cursor. */
+  function handleProcessLog(url: URL, res: ServerResponse): void {
+    const handle = options.processLog;
+    if (handle === undefined) {
+      sendJson(res, 404, { error: "process_not_running" });
+      return;
+    }
+    const cursorRaw = url.searchParams.get("cursor") ?? "0";
+    const cursor = Number(cursorRaw);
+    if (!Number.isInteger(cursor) || cursor < 0) {
+      sendJson(res, 400, { error: "invalid_cursor" });
+      return;
+    }
+    sendJson(res, 200, handle.buffer.readFrom(cursor));
+  }
+
   async function serveStatic(path: string, res: ServerResponse, headOnly: boolean): Promise<void> {
     const distRoot = resolve(options.distDir);
     const requestedPath = path === "/" ? "/index.html" : normalize(path);
@@ -535,7 +576,14 @@ export function createCliServer(options: CliServerOptions): Server {
 
     const isHtml = extname(filePath) === ".html";
     const body = isHtml
-      ? Buffer.from(injectCliToken(content.toString("utf8"), options.token, options.logFiles.length))
+      ? Buffer.from(
+          injectCliToken(
+            content.toString("utf8"),
+            options.token,
+            options.logFiles.length,
+            options.processLog?.command ?? null,
+          ),
+        )
       : content;
     res.writeHead(200, {
       "Content-Type": MIME_TYPES[extname(filePath)] ?? "application/octet-stream",

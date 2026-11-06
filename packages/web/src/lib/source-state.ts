@@ -3,7 +3,7 @@ import { create } from "zustand";
 /* Fuente activa del panel de logs: se comparte con el header (indicador de
    conexión) y con el arranque automático de la demo. */
 
-export type SourceId = "demo" | "file" | "remote";
+export type SourceId = "demo" | "file" | "remote" | "process";
 
 type SourceState = {
   source: SourceId;

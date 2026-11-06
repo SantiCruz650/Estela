@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";import type { HttpRequestInp
 import { methodColorClass } from "../lib/method-styles";
 import { newRequestId } from "../lib/request-id";
 import { useResponseStore } from "../lib/response-store";
+import { urlNotice } from "../lib/url-feedback";
 
 type RequestFormProps = {
   onSend: (input: HttpRequestInput) => void;
@@ -61,6 +62,8 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
 
   const noBody = NO_BODY_METHODS.has(method.toUpperCase());
   const customRequestId = headerRows.find((row) => row.key.trim().toLowerCase() === "x-request-id")?.value.trim();
+  // B-10: aviso amable bajo el campo (NO bloquea el envío).
+  const urlNoticeText = urlNotice(url);
 
   function addHeaderRow(): void {
     setHeaderRows((rows) => [...rows, { id: nextRowId(), key: "", value: "" }]);
@@ -134,6 +137,7 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
             inputMode="url"
             autoComplete="off"
             spellCheck={false}
+            aria-describedby={urlNoticeText !== null ? "req-url-hint" : undefined}
             className={`${CONTROLS_HEIGHT} min-w-0 rounded-[10px] border border-line bg-bg px-3 font-mono text-[13.5px] text-code outline-none focus-visible:ring-2 focus-visible:ring-accent/60`}
             value={url}
             onChange={(event) => {
@@ -142,6 +146,11 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
             }}
             placeholder="http://localhost:3000/…"
           />
+          {urlNoticeText !== null && (
+            <p id="req-url-hint" role="note" className="text-[12px] text-warn">
+              {urlNoticeText}
+            </p>
+          )}
         </div>
         <button
           type="button"

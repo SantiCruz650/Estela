@@ -1,9 +1,9 @@
 const STEPS: Array<{ n: string; title: string; text: string; code?: string }> = [
   {
     n: "1",
-    title: "Corre npx @estela-dev/cli",
-    code: "npx @estela-dev/cli",
-    text: "Un comando y el streamer ya escucha tu localhost. Sin instalar nada más.",
+    title: "Corre npx @estela-dev/cli -- npm run dev",
+    code: "npx @estela-dev/cli -- npm run dev",
+    text: "Un comando arranca TU backend y el streamer ya escucha su salida. Sin instalar nada más.",
   },
   {
     n: "2",

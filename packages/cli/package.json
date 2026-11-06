@@ -1,6 +1,6 @@
 {
   "name": "@estela-dev/cli",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Estela en local: sirve la app y puentea tu backend sin CORS (solo 127.0.0.1).",
   "keywords": [
     "api-client",
@@ -34,7 +34,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-web-dist.mjs",
+    "build": "tsc -p tsconfig.build.json && node scripts/compile-cli-runtime.mjs && node scripts/copy-web-dist.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "lint": "tsc --noEmit",

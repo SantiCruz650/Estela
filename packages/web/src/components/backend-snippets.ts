@@ -206,4 +206,5 @@ class RequestIdMiddleware:
   },
 ];
 
-export const BACKEND_ID_HINT = "Estela reconoce el ID en cualquier formato y en cualquier parte de la línea: basta con que el texto del ID aparezca en tu log.";
+export const BACKEND_ID_HINT =
+  "Recomendado: corre la app con npx @estela-dev/cli -- <tu comando> y Estela captura la salida en vivo (sin archivos de log). Estela reconoce el ID en cualquier formato y en cualquier parte de la línea: basta con que el texto del ID aparezca en tu log.";

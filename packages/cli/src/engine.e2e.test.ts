@@ -15,7 +15,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { spawn, type ChildProcess } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, appendFileSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, appendFileSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -514,6 +514,160 @@ describe("estela e2e (Chrome headless)", {
     } finally {
       backend.closeAllConnections?.();
       await new Promise<void>((resolve) => backend.close(() => resolve()));
+    }
+  });
+
+  it("modo proceso: fuente Proceso por defecto, stderr como probable y banner al terminar", { timeout: 120_000 }, async () => {
+    // Backend hijo DE VERDAD que arranca el CLI con `--`, loguea por stdout
+    // y stderr, y se apaga solo con código 7 al pedir /__quit.
+    const childScript = join(workspace, "echo-server.cjs");
+    writeFileSync(
+      childScript,
+      [
+        "const http = require('node:http');",
+        "const server = http.createServer((req, res) => {",
+        "  if (req.url === '/__quit') {",
+        "    res.writeHead(200);",
+        "    res.end('bye');",
+        "    server.closeAllConnections && server.closeAllConnections();",
+        "    server.close(() => process.exit(7));",
+        "    return;",
+        "  }",
+        "  const id = String(req.headers['x-request-id'] || 'sin-id');",
+        "  console.log('req=' + id + ' GET ' + req.url);",
+        "  console.error('advertencia utf-8 éé ' + id);",
+        "  res.writeHead(200, { 'content-type': 'application/json' });",
+        "  res.end(JSON.stringify({ ok: true, requestId: id }));",
+        "});",
+        "server.listen(0, '127.0.0.1', () => console.log('PORT:' + server.address().port));",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const processPort = 31000 + Math.floor(Math.random() * 20000);
+    const cliProc = spawn(
+      process.execPath,
+      [distCli, "--port", String(processPort), "--no-open", "--", process.execPath, childScript],
+      { stdio: ["ignore", "pipe", "pipe"] },
+    );
+    try {
+      const procStdout: string[] = [];
+      cliProc.stdout?.on("data", (d) => procStdout.push(String(d)));
+      cliProc.stderr?.on("data", (d) => procStdout.push(String(d)));
+      let processApp = "";
+      for (let i = 0; i < 60 && processApp === ""; i++) {
+        await sleep(100);
+        processApp = procStdout.join("").match(/http:\/\/localhost:\d+\/app/)?.[0] ?? "";
+      }
+      expect(processApp).not.toBe("");
+      expect(procStdout.join("")).toContain(`proceso: ${process.execPath} ${childScript}`);
+      let childPort = "";
+      for (let i = 0; i < 60 && childPort === ""; i++) {
+        await sleep(100);
+        childPort = procStdout.join("").match(/PORT:(\d+)/)?.[1] ?? "";
+      }
+      expect(childPort).not.toBe("");
+
+      // Navega a la app del CLI en modo proceso y verifica la fuente por defecto:
+      // NO es "Backend local": es "Proceso: node <script>" ya pulsada.
+      await page!.evalJs(`location.href = ${JSON.stringify(processApp)}; "goto"`);
+      for (let i = 0; i < 40 && (await page!.evalJs(`location.pathname`)) !== "/app"; i++) {
+        await sleep(250);
+      }
+      let activeSource = "";
+      for (let i = 0; i < 30 && activeSource === ""; i++) {
+        await sleep(250);
+        activeSource =
+          String(
+            await page!.evalJs(
+              '(() => { const b=[...document.querySelectorAll("button[aria-pressed=\'true\']")].map((e)=>e.textContent?.trim()??""); return b.find((t)=>t.startsWith("Proceso")) ?? ""; })()',
+            ),
+          ) || "";
+      }
+      expect(activeSource.startsWith("Proceso:")).toBe(true);
+
+      // Enviar un request real hacia el hijo vía /api/proxy (como el usuario).
+      const fill = String(
+        await page!.evalJs(`(() => {
+          const input = document.querySelector("#req-url");
+          if (input === null) return "no-url-input";
+          const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+          setter.call(input, ${JSON.stringify(`http://127.0.0.1:${childPort}/api/me`)});
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          return "ok";
+        })()`),
+      );
+      expect(fill).toBe("ok");
+      const sendClicked = String(
+        await page!.evalJs(
+          '(() => { const b=[...document.querySelectorAll("button")].find((e)=>e.textContent?.trim()==="Enviar"); if (b===undefined) return "no"; b.click(); return "ok"; })()',
+        ),
+      );
+      expect(sendClicked).toBe("ok");
+
+      // Las líneas del hijo (stdout con req=<id> y stderr sin id) llegan al panel.
+      let rowsOk = false;
+      for (let i = 0; i < 40 && !rowsOk; i++) {
+        await sleep(250);
+        rowsOk =
+          String(
+            await page!.evalJs(
+              '(() => { const t=[...document.querySelectorAll(\'[role="log"] > div\')].map((r)=>r.textContent??"").join("\\n"); return t.includes("GET /api/me") && t.includes("advertencia utf-8"); })()',
+            ),
+          ) === "true";
+      }
+      expect(rowsOk, "las líneas del proceso no aparecieron").toBe(true);
+
+      // La hora del CLI vs badge: la línea stderr sin nivel reconocible es "—".
+      const rows = JSON.parse(
+        String(await page!.evalJs(`JSON.stringify((() => {
+          const rows = [...document.querySelectorAll('[role="log"] > div')];
+          return rows.map((r) => {
+            const cells = [...r.children].map((c) => c.textContent?.trim() ?? "");
+            return {
+              clock: cells[1] ?? "",
+              badge: cells[2] ?? "",
+              text: cells[3] ?? "",
+            };
+          });
+        })())`)),
+      ) as Array<{ clock: string; badge: string; text: string }>;
+      const warnRow = rows.find((r) => r.text.includes("advertencia utf-8"));
+      expect(warnRow, "no hay fila stderr").toBeDefined();
+      expect(warnRow?.badge).toBe("—");
+      expect(warnRow?.clock).toMatch(/^\d{2}:\d{2}:\d{2}\.\d{3}$/);
+
+      // El hijo pide cerrarse solo: banner "Tu proceso terminó con código 7."
+      // y el CLI sigue vivo (la app sigue funcionando).
+      const quitStatus = Number(
+        await page!.evalJs(
+          `fetch("/api/proxy", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-estela-token": window.__ESTELA_CLI_TOKEN__ },
+            body: JSON.stringify({ method: "GET", url: ${JSON.stringify(`http://127.0.0.1:${childPort}/__quit`)}, requestId: "e2e-quit-1", headers: {} }),
+          }).then((r) => r.status)`,
+        ),
+      );
+      expect(quitStatus).toBe(200);
+      let exitBanner = "";
+      for (let i = 0; i < 40 && !exitBanner.includes("código 7"); i++) {
+        await sleep(250);
+        exitBanner = String(await page!.evalJs(`document.body.innerText.includes("Tu proceso terminó con código 7") ? "código 7" : ""`));
+      }
+      expect(exitBanner).toContain("código 7");
+      // El CLI sigue siendo accesible después de que el hijo murió.
+      const stillUp = Number(
+        await page!.evalJs(
+          `fetch("/api/process?cursor=0", { headers: { "x-estela-token": window.__ESTELA_CLI_TOKEN__ } }).then((r) => r.status)`,
+        ),
+      );
+      expect(stillUp).toBe(200);
+      expect(procStdout.join("")).toContain("código 7");
+    } finally {
+      cliProc.kill();
+      // Espera a que el árbol del CLI+child libere el puerto (dispose).
+      await sleep(400);
     }
   });
 });

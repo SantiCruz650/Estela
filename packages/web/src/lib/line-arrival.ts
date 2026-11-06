@@ -16,6 +16,27 @@ export function markArrival(lines: readonly LogLine[]): void {
   }
 }
 
+/**
+ * Igual que markArrival pero con la hora que midió el CLI para cada línea
+ * (misma posición del lote): evita sumar la latencia del polling al
+ * calcular el hueco probable. Si el lote no trae hora en alguna posición, usa la
+ * hora actual (párrafo igual al markArrival normal).
+ */
+export function markArrivalAt(lines: readonly LogLine[], epochs: readonly number[]): void {
+  const fallback = Date.now();
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (line === undefined) {
+      continue;
+    }
+    if (arrivals.has(line)) {
+      continue;
+    }
+    const at = epochs[i];
+    arrivals.set(line, typeof at === "number" && Number.isFinite(at) ? at : fallback);
+  }
+}
+
 export function arrivalOf(line: LogLine): number | null {
   return arrivals.get(line) ?? null;
 }

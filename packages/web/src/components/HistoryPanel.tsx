@@ -3,6 +3,7 @@ import { trailColor } from "../lib/trail-colors";
 import { methodColorClass } from "../lib/method-styles";
 import { getHistory, type HistoryEntry } from "../lib/db";
 import { useResponseStore } from "../lib/response-store";
+import { urlPathView } from "../lib/format-url";
 
 function clockTime(startedAt: number): string {
   return new Date(startedAt).toLocaleTimeString([], { hour12: false });
@@ -10,14 +11,12 @@ function clockTime(startedAt: number): string {
 
 /** pathname+search de la URL (sin origen); el host solo si no es localhost:3000. */
 function urlView(url: string): { path: string; host: string | null } {
+  const path = urlPathView(url);
   try {
     const parsed = new URL(url);
-    return {
-      path: `${parsed.pathname}${parsed.search}`,
-      host: parsed.host === "localhost:3000" ? null : parsed.host,
-    };
+    return { path, host: parsed.host === "localhost:3000" ? null : parsed.host };
   } catch {
-    return { path: url, host: null };
+    return { path, host: null };
   }
 }
 

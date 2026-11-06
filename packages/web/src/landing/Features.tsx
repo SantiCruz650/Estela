@@ -38,7 +38,7 @@ const SIDE_FEATURES: SideFeature[] = [
   },
   {
     title: "Un comando y listo",
-    text: "npx @estela-dev/cli. Sin cuentas ni tarjetas.",
+    text: "npx @estela-dev/cli -- npm run dev. Sin cuentas ni tarjetas.",
   },
   {
     title: "Una pantalla, nada más",

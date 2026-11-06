@@ -4,7 +4,9 @@ import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import { splitArgvAtDashDash, processCommandLabel } from "@devtool/core";
 import { createCliServer, generateToken } from "./server.js";
+import { spawnProcess, type ProcessRun } from "./process-runner.js";
 import { USAGE } from "./usage.js";
 
 function openBrowser(url: string): void {
@@ -47,6 +49,10 @@ function fail(message: string): never {
 }
 
 function main(): void {
+  // Sintaxis modo proceso: TODO lo que sigue al primer "--" es el comando del
+  // usuario (`estela -- npm run dev`). El resto son opciones de Estela.
+  const { before: beforeDashDash, command: commandTokens } = splitArgvAtDashDash(process.argv.slice(2));
+
   const { values } = parseArgs({
     options: {
       port: { type: "string" },
@@ -54,6 +60,7 @@ function main(): void {
       "no-open": { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
+    args: [...beforeDashDash],
     allowPositionals: false,
   });
 
@@ -76,8 +83,36 @@ function main(): void {
     );
   }
 
+  const processMode = commandTokens.length > 0;
+  if (commandTokens.length === 0 && logFiles.length === 0) {
+    console.log(USAGE);
+    console.log("\nestela: falta el comando. Pasa tu backend después de \"--\", p. ej.:");
+    console.log("  npx @estela-dev/cli -- npm run dev");
+    console.log("  npx @estela-dev/cli --log ruta/al/archivo.log   (modo archivo de log)");
+    process.exit(1);
+  }
+
+  // Modo proceso: arranca TU backend y captura su salida (hora exacta por línea).
+  let run: ProcessRun | null = null;
+  if (processMode) {
+    run = spawnProcess(commandTokens);
+    run.onExit((code) => {
+      if (code === null) {
+        console.log("(tu proceso se cerró sin código de salida)");
+        return;
+      }
+      console.log(`(tu proceso terminó con código ${code} — Estela sigue abierta)`);
+    });
+  }
+
   const token = generateToken();
-  const server = createCliServer({ port, distDir, logFiles, token });
+  const server = createCliServer({
+    port,
+    distDir,
+    logFiles,
+    token,
+    ...(run !== null ? { processLog: { command: processCommandLabel(commandTokens), buffer: run.buffer } } : {}),
+  });
 
   server.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
@@ -91,7 +126,10 @@ function main(): void {
     const boundPort = typeof address === "object" && address !== null ? address.port : port;
     const appUrl = `http://localhost:${boundPort}/app`;
     console.log(`Estela sirviendo en ${appUrl}`);
-    console.log(`  (solo 127.0.0.1 — token de sesión activo${logFiles.length > 0 ? ` — ${logFiles.length} archivo(s) de log` : ""})`);
+    const subtitle = processMode
+      ? `proceso: ${processCommandLabel(commandTokens)}${logFiles.length > 0 ? ` + ${logFiles.length} archivo(s) de log` : ""}`
+      : `[solo 127.0.0.1 — token de sesión activo${logFiles.length > 0 ? ` — ${logFiles.length} archivo(s) de log` : ""}]`;
+    console.log(`  (${subtitle})`);
     if (values["no-open"] !== true) {
       openBrowser(appUrl);
     } else {
@@ -100,11 +138,22 @@ function main(): void {
   });
 
   const shutdown = (): void => {
+    // Ctrl+C: SIEMPRE matar también el proceso del usuario (y sus subprocesos):
+    // no deben quedar servidores huérfanos ocupando puertos.
+    run?.dispose();
     server.close(() => process.exit(0));
     setTimeout(() => process.exit(0), 1000).unref();
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
+  // Última oportunidad si el proceso muere sin pasar por SIGINT (best effort).
+  process.on("exit", () => {
+    try {
+      run?.dispose();
+    } catch {
+      // ya en cierre: nada más que hacer
+    }
+  });
 }
 
 main();

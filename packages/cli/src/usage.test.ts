@@ -1,19 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { USAGE } from "./usage.js";
 
-/* Regla: el paquete npm sin scope "estela" es de otra persona.
-   La ayuda nunca debe sugerir "npx estela" sin el scope @estela-dev. */
+/* Reglas de la ayuda:
+   1. El comando recomendado hoy es el modo proceso: `estela -- <tu comando>`.
+   2. El paquete npm sin scope "estela" es de otra persona: nunca sugerir
+      "npx estela" sin el scope @estela-dev. */
 
 describe("texto de --help", () => {
-  it("la línea de uso usa el comando con scope completo", () => {
-    expect(USAGE).toContain(
-      "npx @estela-dev/cli [--port 4000] [--log ruta/al/archivo.log] [--no-open]",
-    );
+  it("recomienda primero el modo proceso (un comando, sin archivos)", () => {
+    expect(USAGE).toContain("npx @estela-dev/cli -- npm run dev");
+    expect(USAGE).toContain("npx @estela-dev/cli --port 4100 -- python -u app.py");
+  });
+
+  it("documenta que todo tras -- es el comando del usuario", () => {
+    expect(USAGE).toContain("es TU comando");
+  });
+
+  it("el modo archivo sigue disponible y combinable tras el --", () => {
+    expect(USAGE).toContain("npx @estela-dev/cli --port 4000 --log ruta/al/archivo.log");
+    expect(USAGE).toContain("--log ./logs/app.log --log ./logs/errors.log -- npm run dev");
   });
 
   it("no sugiere 'npx estela' sin el scope en ningún punto", () => {
-    // "npx estela" seguido de lo que sea (espacio, salto o fin), siempre que
-    // no sea la forma válida "npx estela-dev/cli".
     expect(USAGE).not.toMatch(/npx estela(?!-)/);
   });
 

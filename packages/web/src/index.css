@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* B-11: la UI entera es oscura; decláralo para que los controles nativos
+   (scrollbars, selects, date pickers, autolink del navegador) también lo
+   sean en lugar de aparecer blancos. */
+:root {
+  color-scheme: dark;
+}
+
 /* Geist autohospedada (woff2 en public/fonts): la CSP de netlify.toml
    solo permite font-src 'self', así que sin Google Fonts ni CDNs. */
 @font-face {

@@ -4,6 +4,11 @@ import { buildAmbientRawLine, buildTrailRawLines, demoPath } from "./demo-trail"
 
 const ID = "8f3a1111-2222-4333-8444-555566667777";
 const TS = "2026-10-24T10:00:00.000Z";
+const BASE_MS = Date.parse(TS);
+
+function iso(mls: number): string {
+  return new Date(mls).toISOString();
+}
 
 describe("buildTrailRawLines", () => {
   it("users: flecha de entrada, SQL/caché y flecha de salida, todas con el id", () => {
@@ -11,7 +16,7 @@ describe("buildTrailRawLines", () => {
     expect(raws[0]).toContain(`→ GET /api/users`);
     expect(raws.at(-1)).toContain(`← 200 GET /api/users · 12 ms`);
     expect(raws.every((r) => r.includes(`req=${ID}`))).toBe(true);
-    expect(raws.some((r) => r.startsWith(`[${TS}] DEBUG SELECT`))).toBe(true);
+    expect(raws.some((r) => r.startsWith(`[${iso(BASE_MS + 1)}] DEBUG SELECT`))).toBe(true);
   });
 
   it("orders/918 agrega WARN de query lenta y ERROR con stack", () => {
@@ -26,6 +31,31 @@ describe("buildTrailRawLines", () => {
     expect(parsed.every((l) => l.requestIds.includes(ID))).toBe(true);
     expect(parsed[0].level).toBe("info");
     expect(parsed[1].level).toBe("debug");
+  });
+
+  it("B-13: las horas del rastro son distintas y caben dentro de la duración", () => {
+    const raws = buildTrailRawLines({ requestId: ID, method: "GET", url: "http://s/api/orders/918", status: 500, durationMs: 849, ts: TS });
+    const epochs = raws.map((raw) => Date.parse(raw.slice(1, raw.indexOf("]"))));
+    const distinct = new Set(epochs);
+    expect(distinct.size === epochs.length).toBe(true);
+    for (const epoch of epochs) {
+      expect(epoch).toBeGreaterThanOrEqual(BASE_MS);
+      expect(epoch).toBeLessThanOrEqual(BASE_MS + 849);
+    }
+    for (let i = 1; i < epochs.length; i += 1) {
+      expect(epochs[i] ?? 0).toBeGreaterThan(epochs[i - 1] ?? 0);
+    }
+    // La flecha de salida va cerca del final (98%), empezando al inicio (~3%).
+    expect((epochs[epochs.length - 1] ?? 0) - BASE_MS).toBe(832);
+    expect((epochs[0] ?? 0) - BASE_MS).toBe(25);
+  });
+
+  it("B-13: duración 0 sigue generando horas estrictamente crecientes", () => {
+    const raws = buildTrailRawLines({ requestId: ID, method: "DELETE", url: "http://s/api/session", status: 204, durationMs: 0, ts: TS });
+    const epochs = raws.map((raw) => Date.parse(raw.slice(1, raw.indexOf("]"))));
+    for (let i = 1; i < epochs.length; i += 1) {
+      expect(epochs[i] ?? 0).toBeGreaterThan(epochs[i - 1] ?? 0);
+    }
   });
 });
 

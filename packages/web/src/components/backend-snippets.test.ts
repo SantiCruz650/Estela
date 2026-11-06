@@ -40,6 +40,7 @@ function rawRequest(
 
 describe("backend-snippets", () => {
   it("explica que el ID se reconoce en cualquier formato y en cualquier parte", () => {
+    expect(BACKEND_ID_HINT).toContain("npx @estela-dev/cli");
     expect(BACKEND_ID_HINT).toContain("cualquier formato");
     expect(BACKEND_ID_HINT).toContain("cualquier parte");
   });

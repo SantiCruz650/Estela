@@ -33,7 +33,15 @@ Tres caminos, según tu caso. Todos mantienen la correlación petición↔logs.
 
 ### 1. CLI local (recomendado para empezar)
 
-Publicado en npm como `@estela-dev/cli` (el nombre simple `estela` ya estaba ocupado):
+Publicado en npm como `@estela-dev/cli` (el nombre simple `estela` ya estaba ocupado). **Modo recomendado**: Estela arranca tu backend y captura su salida en vivo (stdout/stderr), sin archivos de log:
+
+```bash
+npx @estela-dev/cli -- npm run dev
+```
+
+Todo lo que va tras `--` es tu comando (`-- python -u app.py`, `-- flask run`, …). Con Ctrl+C cierras Estela y tu backend a la vez; si el proceso termina por sí solo, Estela lo anuncia en el panel y sigue sirviendo la app.
+
+Alternativa: apuntar a archivos de log ya existentes con `--log` (repetible):
 
 ```bash
 npx @estela-dev/cli --port 4000 --log ruta/al/archivo.log
@@ -46,10 +54,11 @@ npm run build -w web
 npm exec estela -- --port 4000 --log ruta/al/archivo.log
 ```
 
-Esto sirve el build de la web en http://localhost:4000, abre el navegador y levanta dos endpoints protegidos con un token aleatorio de la sesión:
+Esto sirve el build de la web en http://localhost:4000, abre el navegador y levanta tres endpoints protegidos con un token aleatorio de la sesión:
 
 - `POST /api/proxy` — ejecuta tu request hacia `localhost`/`127.0.0.1` (timeout 30 s, body truncado a 1 MB). Sin problemas de CORS.
 - `GET /api/tail?offset=N` — hace tail en vivo de los archivos pasados con `--log` (repetible). El CLI solo lee esos archivos: nunca rutas que mande el navegador.
+- `GET /api/process?cursor=N` — salida del comando arrancado con `--` (buffer circular: máx. 20 000 líneas / 5 MB).
 
 La app detecta que corre dentro del CLI (token inyectado en el HTML) y usa `/api/proxy` y `/api/tail` automáticamente, con el indicador "Modo local". El servidor solo escucha en 127.0.0.1, valida el header Host (anti DNS rebinding) y el Origin, y nunca envía headers CORS.
 
@@ -67,11 +76,11 @@ Vive en Netlify: `esteladev.netlify.app` (build `npm run build -w web`, redirect
 
 ## Estructura
 
-- `packages/core` — motor TS puro: cliente HTTP, parser de logs, correlador (con tests).
+- `packages/core` — motor TS puro: cliente HTTP, parser de logs, correlador, buffer/captura del modo proceso (con tests).
 - `packages/web` — React + Vite + Zustand + Dexie.
 - `packages/extension` — puente MV3, se agrega en fase posterior.
 - `packages/demo-backend` — API local de prueba que loguea con request ID.
-- `packages/cli` — `npx @estela-dev/cli`: sirve el build local con proxy `/api/proxy` y tail `/api/tail` (solo builtins de Node, sin dependencias).
+- `packages/cli` — `npx @estela-dev/cli`: sirve el build local con proxy `/api/proxy`, tail `/api/tail`, salida del modo proceso en `/api/process` (solo builtins de Node, sin dependencias).
 
 ## Tipografías
 

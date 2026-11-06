@@ -12,6 +12,8 @@ declare global {
     __ESTELA_CLI_TOKEN__?: string;
     /** Nº de archivos --log que el CLI configuró; falta en un CLI antiguo. */
     __ESTELA_CLI_LOG_COUNT__?: number;
+    /** Etiqueta del comando que el CLI arrancó con `--` (null si no hay proceso). */
+    __ESTELA_CLI_PROCESS__?: string | null;
   }
 }
 
@@ -36,7 +38,25 @@ export function getCliLogCount(): number | null {
   return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : null;
 }
 
+/**
+ * Comando que el CLI arrancó con `npx @estela-dev/cli -- <comando>`
+ * (inyectado junto al token en el HTML). null si no hay proceso:
+ * CLI antiguo, modo sin `--`, o valor no string.
+ */
+export function getCliProcessCommand(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const command = window.__ESTELA_CLI_PROCESS__;
+  return typeof command === "string" && command !== "" ? command : null;
+}
+
 /** true cuando corre dentro del CLI local (proxy /api/proxy y tail /api/tail disponibles). */
 export function isCliMode(): boolean {
   return getCliToken() !== null;
+}
+
+/** true cuando además el CLI arrancó un proceso con `-- <comando>`. */
+export function isCliProcessMode(): boolean {
+  return isCliMode() && getCliProcessCommand() !== null;
 }

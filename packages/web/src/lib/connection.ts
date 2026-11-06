@@ -27,5 +27,5 @@ export function connectionView(
   if (source === "demo" && sourceRunning) {
     return { state: "demo", dotClass: "bg-warn", label: "Demo", detail: "datos simulados" };
   }
-  return { state: "offline", dotClass: "bg-dim", label: "Sin conexión", detail: "usa npx @estela-dev/cli" };
+  return { state: "offline", dotClass: "bg-dim", label: "Sin conexión", detail: "usa npx @estela-dev/cli -- npm run dev" };
 }

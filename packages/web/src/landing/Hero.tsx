@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import HeroDemo from "./HeroDemo";
 import { copyText } from "../lib/clipboard";
 
-const CLI_COMMAND = "npx @estela-dev/cli";
+const CLI_COMMAND = "npx @estela-dev/cli -- npm run dev";
 
 export default function Hero(): JSX.Element {
   const [copied, setCopied] = useState(false);

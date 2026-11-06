@@ -2,8 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   FileSystemLogSource,
   PermissionRequiredError,
+  ProcessLogSource,
   RemoteLogSource,
   type LogLine,
+  type ProcessSnapshot,
 } from "@devtool/core";
 import { pickLogFile } from "./lib/fs-bridge";
 import { useCorrelationStore } from "./lib/correlation-store";
@@ -13,20 +15,22 @@ import { methodColorClass } from "./lib/method-styles";
 import { CLI_TOKEN_HEADER } from "./lib/cli-bridge";
 import { countByLevel, filterLines, levelFilterName, type LevelFilter } from "./lib/log-filter";
 import { cleanLogMessage } from "./lib/log-message";
-import { arrivalOf, formatClockMs, markArrival } from "./lib/line-arrival";
-import { pluralProbableLines, pluralSecureLines, pluralTrailErrors, pluralTrailWarns } from "./lib/trail-counts";
+import { arrivalOf, formatClockMs, markArrival, markArrivalAt } from "./lib/line-arrival";
+import { pluralProbableLines, pluralSecureLines, trailIssuesPhrase } from "./lib/trail-counts";
+import { urlPathView } from "./lib/format-url";
 import { isSecureLineFor, probableLineIds } from "./lib/probable-trail";
 import { trailSpan } from "./lib/trail-gutter";
 import { hexToRgba, trailColor, TRAIL_LINE_ALPHA } from "./lib/trail-colors";
 import { DemoLogSource } from "./lib/demo-source";
 import CodeBlock from "./components/CodeBlock";
 import CorrelationHint from "./components/CorrelationHint";
-import { getCliLogCount, getCliToken, isCliMode } from "./config";
+import { getCliLogCount, getCliProcessCommand, getCliToken, isCliMode, isCliProcessMode } from "./config";
 
-const SOURCE_LABELS: Record<SourceId, string> = {
+const SOURCE_LABELS: Record<SourceId, string | null> = {
   demo: "Demo",
   file: "Archivo .log",
   remote: "Backend local",
+  process: null, // "Proceso: <comando>" (depende del arranque del CLI)
 };
 
 const LEVEL_BADGES: Record<string, string> = {
@@ -37,6 +41,16 @@ const LEVEL_BADGES: Record<string, string> = {
 };
 
 const UNKNOWN_BADGE = "text-dim bg-transparent";
+
+/** Etiqueta del botón de fuente. El proceso muestra el comando que corre. */
+function sourceLabel(id: SourceId): string {
+  const label = SOURCE_LABELS[id];
+  if (id === "process") {
+    const command = getCliProcessCommand();
+    return command === null ? "Proceso" : `Proceso: ${command}`;
+  }
+  return label ?? id;
+}
 
 export default function LogStreamPanel(): JSX.Element {
   const lines = useLogLineStore((state) => state.lines);
@@ -59,6 +73,8 @@ export default function LogStreamPanel(): JSX.Element {
   const [permissionError, setPermissionError] = useState<string | null>(null);
   /** Error del polling remoto (tail): visible en el panel hasta que se recupere. */
   const [sourceError, setSourceError] = useState<string | null>(null);
+  /** Salida del hijo del CLI `{ code }` (código normal, null si lo matamos). */
+  const [processExited, setProcessExited] = useState<{ code: number | null } | null>(null);
   /** true solo tras al MENOS un poll exitoso: "En vivo" exige polling real. */
   const [pollHealthy, setPollHealthy] = useState(false);
   const [remoteBase, setRemoteBase] = useState<string>(() => {
@@ -102,22 +118,27 @@ export default function LogStreamPanel(): JSX.Element {
       setRunning(false);
       setPermissionError(null);
       setSourceError(null);
+      setProcessExited(null);
       setPollHealthy(false);
       setLocalRunning(false);
 
-      const append = (newLines: LogLine[]): void => {
+      /** Envía el lote al buffer/correlación (SIN marcar llegada). */
+      const ingest = (newLines: readonly LogLine[]): void => {
         if (newLines.length > 0) {
-          markArrival(newLines);
-          useLogLineStore.getState().appendLines(newLines);
-          useCorrelationStore.getState().ingest(newLines);
+          useLogLineStore.getState().appendLines([...newLines]);
+          useCorrelationStore.getState().ingest([...newLines]);
         }
+      };
+      const append = (newLines: readonly LogLine[]): void => {
+        markArrival(newLines);
+        ingest(newLines);
       };
       /** Señales del polling: "En vivo" solo cuando un poll dejó la cola completa con éxito. */
       const pollScripts = {
         onError: (): void => {
           setPollHealthy(false);
           setSourceError(
-            "No se pudo leer el log del backend local (el tail falló). Se reintenta automáticamente.",
+            "No se pudo leer la salida del backend local. Se reintenta automáticamente.",
           );
         },
         onPollSuccess: (): void => {
@@ -140,6 +161,38 @@ export default function LogStreamPanel(): JSX.Element {
           setLocalRunning(true);
           setRunning(true);
           setPollHealthy(true);
+          return;
+        }
+        if (nextSource === "process") {
+          const cliToken = getCliToken();
+          const command = getCliProcessCommand();
+          if (cliToken === null || command === null) {
+            // Sin CLI o sin `-- <comando>`: no hay proceso que seguir.
+            setRunning(false);
+            return;
+          }
+          // Salida del proceso que el CLI arrancó: la hora t de cada línea la
+          // midió el CLI (no el navegador) → correlación probable sin latencia.
+          const processSource = new ProcessLogSource(async (cursor: number) => {
+            const response = await fetch(`/api/process?cursor=${cursor}`, {
+              headers: { [CLI_TOKEN_HEADER]: cliToken },
+            });
+            return (await response.json()) as ProcessSnapshot;
+          }, { onError: pollScripts.onError, onPollSuccess: pollScripts.onPollSuccess });
+          const unsubscribe = processSource.subscribe((batch) => {
+            markArrivalAt(batch.lines, batch.arrivalEpochs);
+            ingest(batch.lines);
+            if (batch.exitedNow !== null) {
+              setProcessExited(batch.exitedNow);
+            }
+          });
+          await processSource.start();
+          sourceRef.current = {
+            unsubscribe,
+            stop: () => processSource.stop(),
+          };
+          setLocalRunning(true);
+          setRunning(true);
           return;
         }
         if (nextSource === "remote") {
@@ -202,14 +255,16 @@ export default function LogStreamPanel(): JSX.Element {
     [clearLines, remoteBase, setRunning, stopActiveSource],
   );
 
-  // Primer arranque: demo automática fuera del modo CLI; en CLI arranca tail.
+  // Primer arranque: demo automática; con CLI, proceso si lo hay (fuentes
+  // de archivos al ser seleccionado a mano).
   useEffect(() => {
     if (bootStarted.current) {
       return;
     }
     bootStarted.current = true;
-    setSource(isCliMode() ? "remote" : "demo");
-    void startSource(isCliMode() ? "remote" : "demo");
+    const bootSource: SourceId = isCliProcessMode() ? "process" : isCliMode() ? "remote" : "demo";
+    setSource(bootSource);
+    void startSource(bootSource);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -305,6 +360,9 @@ export default function LogStreamPanel(): JSX.Element {
 
   // CLI sin --log: /api/tail no tiene archivos → mensaje con comando, no error.
   const cliNoLogs = isCliMode() && source === "remote" && getCliLogCount() === 0;
+  const sourceButtons = (Object.keys(SOURCE_LABELS) as SourceId[]).filter(
+    (id) => id !== "process" || getCliProcessCommand() !== null,
+  );
 
   return (
     <section className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-line bg-surface p-4">
@@ -334,22 +392,23 @@ export default function LogStreamPanel(): JSX.Element {
         </span>
         <span className="ml-auto flex items-center gap-2">
           <div className="flex items-center gap-0.5 rounded-[10px] border border-line bg-bg p-[3px]" role="group" aria-label="Fuente de logs">
-            {(Object.keys(SOURCE_LABELS) as SourceId[]).map((id) => {
+            {sourceButtons.map((id) => {
               const isActive = source === id;
               return (
                 <button
                   key={id}
                   type="button"
                   aria-pressed={isActive}
-                  className={`min-h-[32px] rounded-[8px] px-3 text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                  className={`min-h-[32px] max-w-[220px] truncate rounded-[8px] px-3 text-[12.5px] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
                     isActive ? "bg-elevated font-semibold text-ink" : "text-ink-2 hover:text-ink"
                   }`}
+                  title={sourceLabel(id)}
                   onClick={() => {
                     setSource(id);
                     void startSource(id);
                   }}
                 >
-                  {SOURCE_LABELS[id]}
+                  {sourceLabel(id)}
                 </button>
               );
             })}
@@ -394,6 +453,29 @@ export default function LogStreamPanel(): JSX.Element {
         </div>
       )}
 
+      {/* Tu proceso terminó (el servidor sigue vivo): banner con el código y
+          el comando para volver a arrancarlo cuando quieras. */}
+      {source === "process" && processExited !== null && (
+        <div
+          className="flex flex-wrap items-center gap-2 rounded-[10px] border border-line bg-[rgba(148,163,184,0.07)] px-3 py-2 text-[12.5px]"
+          role="status"
+        >
+          <span className="text-ink-2">
+            {processExited.code === null
+              ? "Tu proceso terminó (lo cerramos con Ctrl+C). El servidor sigue activo y tus logs también."
+              : `Tu proceso terminó con código ${processExited.code}. El servidor sigue activo y tus logs también.`}
+          </span>
+          {getCliProcessCommand() !== null && (
+            <div className="min-w-0 max-w-full">
+              <CodeBlock
+                code={`npx @estela-dev/cli -- ${getCliProcessCommand()}`}
+                ariaLabel="Comando para volver a arrancar tu proceso con Estela"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Barra de rastro */}
       {selectedRequest !== null &&
         (() => {
@@ -415,12 +497,11 @@ export default function LogStreamPanel(): JSX.Element {
                   <span className={`font-semibold ${methodColorClass(selectedRequest.method)}`}>
                     {selectedRequest.method.toUpperCase()}
                   </span>{" "}
-                  {selectedRequest.url.replace(/^https?:\/\/[^/]+/, "")}
+                  {urlPathView(selectedRequest.url)}
                 </span>
                 <span className="block text-[12.5px] text-ink-2">
                   {pluralSecureLines(trailLines.length)} · {pluralProbableLines(trailProbable)} ·{" "}
-                  {pluralTrailErrors(trailErrors)} ·{" "}
-                  {pluralTrailWarns(trailWarns)} ·{" "}
+                  {trailIssuesPhrase(trailErrors, trailWarns)} ·{" "}
                   {trailDuration === null ? "—" : `${Math.round(trailDuration)} ms de principio a fin`}
                   <span
                     tabIndex={0}
@@ -490,7 +571,7 @@ export default function LogStreamPanel(): JSX.Element {
       <div className="relative">
         {cliNoLogs ? (
           <div className="flex min-h-[160px] flex-col items-center justify-center gap-2 rounded-[10px] border border-line bg-bg px-3 py-6 text-center text-[12.5px]">
-            <span className="text-ink-2">No hay ningún archivo de log conectado. Reinicia con:</span>
+            <span className="text-ink-2">No hay ningún archivo de log conectado. Conéctalo con:</span>
             <div className="w-full max-w-[440px]">
               <CodeBlock code={"npx @estela-dev/cli --log ruta/a/tu.log"} ariaLabel="Comando para conectar un archivo de log" />
             </div>

@@ -4,6 +4,7 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { AddressInfo } from "node:net";
+import { ProcessLogBuffer } from "@devtool/core";
 import { createCliServer, type CliServerOptions } from "./server.js";
 
 const TOKEN = "test-token-0123456789abcdef";
@@ -649,6 +650,113 @@ describe("createCliServer", () => {
       const address = (openServers[openServers.length - 1]?.address() ?? null) as AddressInfo | null;
       expect(address?.address).toBe("127.0.0.1");
       expect(port).toBeGreaterThan(0);
+    });
+  });
+
+  describe("GET /api/process (modo proceso)", () => {
+    it("sin modo proceso: 404 process_not_running", async () => {
+      const port = await startServer();
+      const result = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      expect(result.status).toBe(404);
+      expect(jsonResponse(result)).toEqual({ error: "process_not_running" });
+    });
+
+    it("con cursor==0 entrega el backlog completo y el cursor para seguir", async () => {
+      const buffer = new ProcessLogBuffer();
+      buffer.append(1000, "booting", "stdout");
+      buffer.append(1002, "ready", "stdout");
+      const port = await startServer({ processLog: { command: "npm run dev", buffer } });
+      const result = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      expect(result.status).toBe(200);
+      const payload = jsonResponse(result) as {
+        cursor: number;
+        lines: unknown[];
+        exited: unknown;
+      };
+      expect(payload.exited).toBeNull();
+      expect(payload.cursor).toBe(2);
+      expect(payload.lines).toEqual([
+        { t: 1000, text: "booting", stream: "stdout" },
+        { t: 1002, text: "ready", stream: "stdout" },
+      ]);
+    });
+
+    it("cursor lejano: sigue el polling avanzando", async () => {
+      const buffer = new ProcessLogBuffer();
+      buffer.append(1, "a", "stdout");
+      const port = await startServer({ processLog: { command: "npm run dev", buffer } });
+      const first = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      const curs1 = (JSON.parse(first.body) as { cursor: number }).cursor;
+      buffer.append(2, "b", "stderr");
+      buffer.append(3, "c", "stdout");
+      const second = await rawRequest(port, {
+        path: `/api/process?cursor=${curs1}`,
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      const snap2 = JSON.parse(second.body) as { cursor: number; lines: unknown[] };
+      expect(snap2.lines).toEqual([
+        { t: 2, text: "b", stream: "stderr" },
+        { t: 3, text: "c", stream: "stdout" },
+      ]);
+      expect(snap2.cursor).toBe(3);
+      buffer.setExited(0);
+      const third = await rawRequest(port, {
+        path: `/api/process?cursor=${snap2.cursor}`,
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      expect((JSON.parse(third.body) as { exited: unknown }).exited).toEqual({ code: 0 });
+    });
+
+    it("rechaza cursor no numérico o negativo", async () => {
+      const buffer = new ProcessLogBuffer();
+      const port = await startServer({ processLog: { command: "x", buffer } });
+      const result = await rawRequest(port, {
+        path: "/api/process?cursor=abc",
+        headers: { "X-Estela-Token": TOKEN },
+      });
+      expect(result.status).toBe(400);
+      expect(jsonResponse(result)).toEqual({ error: "invalid_cursor" });
+    });
+
+    it("mismas protecciones: sin token 403, token malo 403, ajeno Host 403", async () => {
+      const buffer = new ProcessLogBuffer();
+      const port = await startServer({ processLog: { command: "x", buffer } });
+      const noToken = await rawRequest(port, { path: "/api/process?cursor=0" });
+      expect(noToken.status).toBe(403);
+      expect(jsonResponse(noToken)).toEqual({ error: "invalid_token" });
+      const badToken = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": "otro-token-1111111111111111" },
+      });
+      expect(badToken.status).toBe(403);
+      const evilHost = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": TOKEN, Host: "localhost.evil.com" },
+      });
+      expect(evilHost.status).toBe(403);
+      expect(jsonResponse(evilHost)).toEqual({ error: "invalid_host" });
+      const evilOrigin = await rawRequest(port, {
+        path: "/api/process?cursor=0",
+        headers: { "X-Estela-Token": TOKEN, Host: `localhost:${port}`, Origin: `http://localhost:${port + 1}` },
+      });
+      expect(evilOrigin.status).toBe(403);
+    });
+
+    it("el HTML del CLI inyecta __ESTELA_CLI_PROCESS__ con el comando", async () => {
+      const buffer = new ProcessLogBuffer();
+      const port = await startServer({ processLog: { command: "npm run dev", buffer } });
+      const result = await rawRequest(port, { path: "/app" });
+      expect(result.body).toContain("__ESTELA_CLI_PROCESS__");
+      expect(result.body).toContain('"npm run dev"');
     });
   });
 });
