@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { USAGE } from "./usage.js";
 
 /* Reglas de la ayuda:
-   1. El comando recomendado hoy es el modo proceso: `estela -- <tu comando>`.
+   1. El comando recomendado hoy es el modo proceso; el "--" es OPCIONAL
+      porque los shims de npm (estela.ps1 en PowerShell, npx) se lo comen.
    2. El paquete npm sin scope "estela" es de otra persona: nunca sugerir
       "npx estela" sin el scope @estela-dev. */
 
@@ -12,8 +13,11 @@ describe("texto de --help", () => {
     expect(USAGE).toContain("npx @estela-dev/cli --port 4100 -- python -u app.py");
   });
 
-  it("documenta que todo tras -- es el comando del usuario", () => {
-    expect(USAGE).toContain("es TU comando");
+  it("documenta que el -- es OPCIONAL (los shims de npm lo pierden)", () => {
+    expect(USAGE).toContain("npx @estela-dev/cli npm run dev");
+    expect(USAGE).toContain('también funciona sin "--"');
+    expect(USAGE).not.toContain("es TU comando");
+    expect(USAGE).toContain("es opcional");
   });
 
   it("el modo archivo sigue disponible y combinable tras el --", () => {

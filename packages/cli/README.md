@@ -12,6 +12,8 @@ npx @estela-dev/cli -- npm run dev
 
 Si usas otro runtime: `npx @estela-dev/cli -- python -u app.py`, `npx @estela-dev/cli -- flask run`, etc. (todo lo que va tras `--` es tu comando). Con Ctrl+C cierras Estela y tu backend a la vez.
 
+El separador `--` es **opcional**: `npx @estela-dev/cli npm run dev` también funciona (útil porque en PowerShell el propio `--` se pierde antes de llegar al comando). Sí conviene usarlo si tu comando empieza con `--` o `-` (por ejemplo `-- --fix`): sin él, Estela los leería como opciones propias.
+
 Alternativa: apuntar a archivos de log ya existentes con `--log` (repetible, solo esos archivos quedan disponibles para el stream):
 
 ```bash

@@ -3,8 +3,7 @@ import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
-import { splitArgvAtDashDash, processCommandLabel } from "@devtool/core";
+import { parseEstelaArgv, processCommandLabel } from "@devtool/core";
 import { createCliServer, generateToken } from "./server.js";
 import { spawnProcess, type ProcessRun } from "./process-runner.js";
 import { USAGE } from "./usage.js";
@@ -49,32 +48,27 @@ function fail(message: string): never {
 }
 
 function main(): void {
-  // Sintaxis modo proceso: TODO lo que sigue al primer "--" es el comando del
-  // usuario (`estela -- npm run dev`). El resto son opciones de Estela.
-  const { before: beforeDashDash, command: commandTokens } = splitArgvAtDashDash(process.argv.slice(2));
+  // Parseo propio SIN depender del "--": el shim estela.ps1 de npm en
+  // PowerShell (y npx) se lo come antes de llegarnos. Opciones de Estela
+  // en orden; el primer token que no es opción arranca el comando del usuario.
+  const parsed = parseEstelaArgv(process.argv.slice(2));
+  if (!parsed.ok) {
+    console.log(USAGE);
+    fail(parsed.message);
+  }
+  const { port: portArg, logFiles: logArgs, noOpen, help, command: commandTokens } = parsed.args;
 
-  const { values } = parseArgs({
-    options: {
-      port: { type: "string" },
-      log: { type: "string", multiple: true },
-      "no-open": { type: "boolean", default: false },
-      help: { type: "boolean", short: "h", default: false },
-    },
-    args: [...beforeDashDash],
-    allowPositionals: false,
-  });
-
-  if (values.help === true) {
+  if (help) {
     console.log(USAGE);
     process.exit(0);
   }
 
-  const port = Number(values.port ?? "4000");
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    fail(`puerto inválido: ${values.port ?? ""} (usa --port <1-65535>)`);
+  const port = portArg ?? 4000;
+  if (port < 1 || port > 65535) {
+    fail(`puerto inválido: ${port} (usa --port <1-65535>)`);
   }
 
-  const logFiles = (values.log ?? []).map((path) => resolve(path));
+  const logFiles = logArgs.map((path) => resolve(path));
   const distDir = resolveDistDir();
   if (distDir === null) {
     fail(
@@ -86,8 +80,9 @@ function main(): void {
   const processMode = commandTokens.length > 0;
   if (commandTokens.length === 0 && logFiles.length === 0) {
     console.log(USAGE);
-    console.log("\nestela: falta el comando. Pasa tu backend después de \"--\", p. ej.:");
+    console.log("\nestela: falta el comando. Pasa tu backend con \"--\" (o sin él), p. ej.:");
     console.log("  npx @estela-dev/cli -- npm run dev");
+    console.log("  npx @estela-dev/cli npm run dev           (también sin --)");
     console.log("  npx @estela-dev/cli --log ruta/al/archivo.log   (modo archivo de log)");
     process.exit(1);
   }
@@ -130,10 +125,10 @@ function main(): void {
       ? `proceso: ${processCommandLabel(commandTokens)}${logFiles.length > 0 ? ` + ${logFiles.length} archivo(s) de log` : ""}`
       : `[solo 127.0.0.1 — token de sesión activo${logFiles.length > 0 ? ` — ${logFiles.length} archivo(s) de log` : ""}]`;
     console.log(`  (${subtitle})`);
-    if (values["no-open"] !== true) {
-      openBrowser(appUrl);
-    } else {
+    if (noOpen) {
       console.log("  (--no-open: navegador no abierto)");
+    } else {
+      openBrowser(appUrl);
     }
   });
 

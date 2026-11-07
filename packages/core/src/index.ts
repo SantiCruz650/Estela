@@ -18,6 +18,8 @@ export {
   processCommandLabel,
 } from "./spawn-args.js";
 export type { ProcessArgvSplit, SpawnEnvVars, SpawnPlanForCommand } from "./spawn-args.js";
+export { parseEstelaArgv } from "./cli-argv.js";
+export type { EstelaCliArgs, EstelaCliArgsResult } from "./cli-argv.js";
 export { Correlator, probableRequestForLine, PROBABLE_WINDOW_EXTRA_MS, PROBABLE_ARRIVAL_EXTRA_MS } from "./correlator.js";
 export type { CorrelationResult, RequestRecord } from "./correlator.js";
 export { executeRequest, MAX_BODY_CHARS, DEFAULT_REQUEST_TIMEOUT_MS } from "./http-client.js";
