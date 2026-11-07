@@ -25,6 +25,7 @@ type HeaderRow = {
 };
 
 const STORAGE_URL_KEY = "estela.requestUrl";
+const DEFAULT_URL = "http://localhost:3000/api/users";
 const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"] as const;
 const CONTROLS_HEIGHT = "h-[44px]";
 const NO_BODY_METHODS = new Set(["GET", "HEAD"]);
@@ -37,7 +38,9 @@ function nextRowId(): string {
 
 export default function RequestForm({ onSend, onCancel, sending }: RequestFormProps): JSX.Element {
   const [method, setMethod] = useState<string>("GET");
-  const [url, setUrl] = useState<string>(() => localStorage.getItem(STORAGE_URL_KEY) ?? "http://localhost:3000/api/users");
+  const [url, setUrl] = useState<string>(
+    () => (localStorage.getItem(STORAGE_URL_KEY) ?? DEFAULT_URL).trim(),
+  );
   const [headerRows, setHeaderRows] = useState<HeaderRow[]>([{ id: nextRowId(), key: "", value: "" }]);
   const [body, setBody] = useState<string>("");
   const [activeTab, setActiveTab] = useState<"headers" | "body">("headers");
@@ -81,7 +84,8 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
   }
 
   function send(): void {
-    if (url.trim() === "") {
+    const trimmedUrl = url.trim();
+    if (trimmedUrl === "") {
       return;
     }
     const headers: Record<string, string> = {};
@@ -90,9 +94,15 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
         headers[row.key.trim()] = row.value;
       }
     }
+    setUrl(trimmedUrl);
+    try {
+      localStorage.setItem(STORAGE_URL_KEY, trimmedUrl);
+    } catch {
+      // storage bloqueado: la URL vive solo en el estado
+    }
     onSend({
       method: method.toUpperCase(),
-      url,
+      url: trimmedUrl,
       headers,
       body: noBody ? undefined : body === "" ? undefined : body,
       requestId: customRequestId !== undefined && customRequestId !== "" ? customRequestId : newRequestId(),
@@ -142,15 +152,14 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
             value={url}
             onChange={(event) => {
               setUrl(event.target.value);
-              localStorage.setItem(STORAGE_URL_KEY, event.target.value);
+              try {
+                localStorage.setItem(STORAGE_URL_KEY, event.target.value);
+              } catch {
+                // storage bloqueado: la URL vive solo en el estado
+              }
             }}
             placeholder="http://localhost:3000/…"
           />
-          {urlNoticeText !== null && (
-            <p id="req-url-hint" role="note" className="text-[12px] text-warn">
-              {urlNoticeText}
-            </p>
-          )}
         </div>
         <button
           type="button"
@@ -172,6 +181,15 @@ export default function RequestForm({ onSend, onCancel, sending }: RequestFormPr
           </button>
         )}
       </div>
+
+      {/* B-10: aviso NO bloqueante del envío. Va DEBAJO de toda la fila
+          (método + URL + Enviar) a ancho completo: la fila queda igual con
+          o sin aviso, a cualquier ancho (390 / 768 / 1440 px). */}
+      {urlNoticeText !== null && (
+        <p id="req-url-hint" role="note" className="text-[12px] text-warn">
+          {urlNoticeText}
+        </p>
+      )}
 
       {/* Pestañas Headers/Body */}
       <div className="flex items-baseline gap-5 border-b border-line" role="tablist" aria-label="Secciones del request">
