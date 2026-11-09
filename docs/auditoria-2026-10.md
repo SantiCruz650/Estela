@@ -1,3 +1,7 @@
+Estado: auditoría interna de octubre de 2026, hecha sobre la versión previa a la 0.1.0.
+Todos los problemas descritos aquí fueron corregidos entre las versiones 0.1.0 y 0.1.3.
+Se conserva como registro de transparencia. El repositorio se llamaba "devtool" en ese momento.
+
 # Auditoría técnica — Estela
 
 Auditoría de solo lectura (ningún archivo del proyecto fue modificado para este reporte).
